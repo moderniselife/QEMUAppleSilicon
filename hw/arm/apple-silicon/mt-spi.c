@@ -928,6 +928,7 @@ static const VMStateDescription vmstate_apple_mt_spi_buffer = {
     .minimum_version_id = 0,
     .fields =
         (const VMStateField[]){
+            VMSTATE_UINT32(capacity, AppleMTSPIBuffer),
             VMSTATE_VBUFFER_ALLOC_UINT32(data, AppleMTSPIBuffer, 0, NULL,
                                          capacity),
             VMSTATE_UINT32(len, AppleMTSPIBuffer),
