@@ -22,7 +22,7 @@
 #define ENABLE_DATA_ENCRYPTION
 
 #if defined(ENABLE_DATA_ENCRYPTION) && !defined(ENABLE_SEP)
-#error "Data partition encryption cannot be enabled without SEP"
+#error "Data volume encryption cannot be enabled without SEP"
 #endif
 
 #include "qemu/osdep.h"

@@ -372,7 +372,22 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     DTBProp *prop;
     uint64_t *reg;
     uint8_t data[8] = { 0x00, 0x00, 0x70, 0x80, 0x00, 0x01, 0x19, 0x40 };
-    uint64_t value;
+    uint8_t ac_adapter_count = 1;
+    uint8_t ac_w = 0x1; // should actually be a function
+    uint8_t battery_feature_flags = 0x0;
+    uint16_t battery_cycle_count = 0x7;
+    uint16_t battery_average_time_to_full = 0xffff; // not charging
+    uint32_t battery_max_capacity = 31337;
+    uint32_t battery_full_charge_capacity = battery_max_capacity * 0.98;
+    // *0.69 shows as 67%/68% (console debug output) with full_charge_capacity of 98%
+    uint32_t battery_current_capacity = battery_full_charge_capacity * 0.69;
+    uint32_t battery_remaining_capacity = battery_full_charge_capacity - battery_current_capacity;
+    // b0fv might mean "battery full voltage"
+    uint16_t b0fv = 0x201;
+    uint8_t battery_count = 0x1;
+    uint16_t battery_cell_voltage = 4200;
+    int16_t battery_actual_amperage = 0x0;
+    uint16_t battery_actual_voltage = battery_cell_voltage;
 
     dev = qdev_new(TYPE_APPLE_SMC_IOP);
     s = APPLE_SMC_IOP(dev);
@@ -437,9 +452,10 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     apple_smc_create_key(s, 'NESN', 4, SMCKeyTypeHex,
                          SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_WRITEABLE, NULL);
 
-    value = 1;
     apple_smc_create_key(s, 'AC-N', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
-                         &value);
+                         &ac_adapter_count);
+    apple_smc_create_key(s, 'AC-W', 1, SMCKeyTypeSInt8, SMC_ATTR_DEFAULT_LE | SMC_ATTR_READABLE,
+                         &ac_w);
     apple_smc_create_key(s, 'CHAI', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
                          NULL);
     apple_smc_create_key(s, 'TG0B', 8, SMCKeyTypeIOFT, SMC_ATTR_DEFAULT_LE,
@@ -468,6 +484,9 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                          NULL);
     apple_smc_create_key(s, 'B0AP', 4, SMCKeyTypeSInt32, SMC_ATTR_DEFAULT_LE,
                          NULL);
+    // uint32_t b0ap = 0x80;
+    // apple_smc_create_key(s, 'B0AP', 4, SMCKeyTypeFLT,
+    //                      SMC_ATTR_DEFAULT_LE | SMC_ATTR_READABLE, &b0ap);
     apple_smc_create_key(s, 'Th0a', 8, SMCKeyTypeFLT, SMC_ATTR_DEFAULT_LE,
                          NULL);
     apple_smc_create_key(s, 'Th1a', 8, SMCKeyTypeFLT, SMC_ATTR_DEFAULT_LE,
@@ -506,9 +525,83 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                          NULL);
     apple_smc_create_key(s, 'D0VR', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
                          NULL);
+#if 1
+    apple_smc_create_key(s, 'D1VR', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         NULL);
+    apple_smc_create_key(s, 'D2VR', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         NULL);
+#endif
     apple_smc_create_key(s, 'TV0s', 8, SMCKeyTypeIOFT, SMC_ATTR_DEFAULT_LE,
                          NULL);
 
+#if 1
+    apple_smc_create_key(s, 'BHTL', 1, SMCKeyTypeFlag,
+                         SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_WRITEABLE | SMC_ATTR_READABLE, NULL);
+    apple_smc_create_key(s, 'BFS0', 1, SMCKeyTypeUInt8,
+                         SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_READABLE, &battery_feature_flags);
+    apple_smc_create_key(s, 'B0CT', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_cycle_count);
+    apple_smc_create_key(s, 'B0TF', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_average_time_to_full);
+    apple_smc_create_key(s, 'B0CM', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &battery_max_capacity);
+    apple_smc_create_key(s, 'B0FC', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &battery_full_charge_capacity);
+    apple_smc_create_key(s, 'B0UC', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &battery_current_capacity);
+    apple_smc_create_key(s, 'B0RM', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &battery_remaining_capacity);
+    apple_smc_create_key(s, 'B0FV', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0fv);
+    uint8_t bdd1 = 0x19;
+    apple_smc_create_key(s, 'BDD1', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
+                         &bdd1);
+    uint8_t ub0c = 0x0;
+    apple_smc_create_key(s, 'UB0C', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
+                         &ub0c);
+    apple_smc_create_key(s, 'BNCB', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
+                         &battery_count);
+    apple_smc_create_key(s, 'BC1V', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_cell_voltage);
+    apple_smc_create_key(s, 'BC2V', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_cell_voltage);
+    apple_smc_create_key(s, 'BC3V', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_cell_voltage);
+    apple_smc_create_key(s, 'BC4V', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_cell_voltage);
+    uint16_t b0dc = 0xef13;
+    apple_smc_create_key(s, 'B0DC', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0dc);
+    uint16_t b0bl = 0x0;
+    apple_smc_create_key(s, 'B0BL', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0bl);
+    uint16_t b0ca = 0x0;
+    apple_smc_create_key(s, 'B0CA', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0ca);
+    uint16_t b0nc = 0x0;
+    apple_smc_create_key(s, 'B0NC', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0nc);
+    int16_t b0iv = 0x0;
+    apple_smc_create_key(s, 'B0IV', 2, SMCKeyTypeSInt16, SMC_ATTR_DEFAULT_LE,
+                         &b0iv);
+    apple_smc_create_key(s, 'B0AC', 2, SMCKeyTypeSInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_actual_amperage);
+    apple_smc_create_key(s, 'B0AV', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
+                         &battery_actual_voltage);
+    uint8_t chnc = 0x1;
+    apple_smc_create_key(s, 'CHNC', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
+                         &chnc);
+    uint32_t chas = 0x0;
+    apple_smc_create_key(s, 'CHAS', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &chas);
+    // settings (as a whole) won't open/will crash if cha1 is missing
+    // maybe the settings and safari crashes are unrelated from smc
+    uint32_t cha1 = 0x0;
+    apple_smc_create_key(s, 'CHA1', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
+                         &cha1);
+    // TODO: BHT0 battery heat map function, length 0x19/25
+    // TODO: battery settings page won't fully load
+#endif
     return sbd;
 }
 
