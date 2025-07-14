@@ -165,6 +165,7 @@ struct AppleDARTState {
     uint32_t sids;
     uint32_t bypass;
     uint64_t bypass_address;
+    uint32_t dart_options;
     bool dart_dart_force_active_val;
     bool dart_dart_request_sid_val;
     bool dart_dart_release_sid_val;
@@ -323,14 +324,17 @@ static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 static uint64_t base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     AppleDARTInstance *o = (AppleDARTInstance *)opaque;
+    AppleDARTState *s = o->s;
     DPRINTF("%s[%d]: (%s) %s @ 0x" HWADDR_FMT_plx "\n", o->s->name, o->id,
             dart_instance_name[o->type], __func__, addr);
 
     if (o->type == DART_DART) {
         switch (addr) {
-        case REG_DART_PARAMS1:
+        case REG_DART_PARAMS1: {
             // TODO: added hack against panic
-            return o->base_reg[addr >> 2] | (1 << 31);
+            bool access_region_protection = (s->dart_options & 0x2) != 0;
+            return o->base_reg[addr >> 2] | (access_region_protection << 31);
+        }
         case REG_DART_TLB_OP:
             return qatomic_read(&o->tlb_op);
         case REG_DART_ERROR_STATUS:
@@ -641,6 +645,13 @@ AppleDARTState *apple_dart_create(DTBNode *node)
     prop = dtb_find_prop(node, "bypass-address");
     if (prop != NULL && prop->length >= 8) {
         s->bypass_address = ldq_le_p(prop->data);
+    }
+
+    prop = dtb_find_prop(node, "dart-options");
+    if (prop != NULL && prop->length >= 4) {
+        s->dart_options = ldl_le_p(prop->data);
+    } else {
+        s->dart_options = 0x0;
     }
 
     prop = dtb_find_prop(node, "instance");
