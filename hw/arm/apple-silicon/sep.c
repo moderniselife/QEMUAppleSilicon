@@ -3830,14 +3830,13 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
 
     ecc_point_init(ecc_pub, ecc);
     ecc_scalar_init(ecc_key, ecc);
+
+    mpz_init(temp1);
     mpz_set_str(temp1, priv, 16);
     mpz_add_ui(temp1, temp1, 1);
     g_assert_cmpuint(ecc_scalar_set(ecc_key, temp1), !=, 0);
-
     mpz_clear(temp1);
 
-    ///
-    //
     ecc_point_mul_g(ecc_pub, ecc_key);
 
     // ecc_scalar_clear (ecc_key);
