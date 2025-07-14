@@ -19,12 +19,10 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/memory.h"
 #include "hw/display/apple_displaypipe_v4.h"
 #include "hw/irq.h"
 #include "hw/qdev-properties.h"
 #include "migration/vmstate.h"
-#include "qemu/cutils.h"
 #include "qemu/log.h"
 #include "ui/console.h"
 #include "framebuffer.h"
@@ -73,15 +71,15 @@ typedef struct {
     uint16_t disp_height;
     uint32_t config_control;
     uint32_t pixel_format;
-    uint16_t width;
-    uint16_t height;
+    uint16_t frame_width;
+    uint16_t frame_height;
     uint32_t base;
     uint32_t end;
     uint32_t stride;
-    uint16_t buf_width;
-    uint16_t buf_height;
+    uint16_t width;
+    uint16_t height;
     uint8_t *buf;
-    size_t buf_alloc_size;
+    uint32_t buf_len;
     bool dirty;
 } ADPV4GenPipeState;
 
@@ -198,17 +196,17 @@ static void adp_v4_update_irqs(AppleDisplayPipeV4State *s)
 static pixman_format_code_t adp_v4_gp_fmt_to_pixman(ADPV4GenPipeState *s)
 {
     if ((s->pixel_format & GP_PIXEL_FORMAT_BGRA) == GP_PIXEL_FORMAT_BGRA) {
-        ADP_INFO("[gp%d] Pixel Format is BGRA (0x%X).", s->index,
+        ADP_INFO("gp%d: pixel format is BGRA (0x%X).", s->index,
                  s->pixel_format);
         return PIXMAN_b8g8r8a8;
     } else if ((s->pixel_format & GP_PIXEL_FORMAT_ARGB) ==
                GP_PIXEL_FORMAT_ARGB) {
-        ADP_INFO("[gp%d] Pixel Format is ARGB (0x%X).", s->index,
+        ADP_INFO("gp%d: pixel format is ARGB (0x%X).", s->index,
                  s->pixel_format);
         return PIXMAN_a8r8g8b8;
     } else {
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "[gp%d] Pixel Format is unknown (0x%X).\n", s->index,
+                      "gp%d: pixel format is unknown (0x%X).\n", s->index,
                       s->pixel_format);
         return 0;
     }
@@ -219,46 +217,43 @@ static void adp_v4_gp_read(ADPV4GenPipeState *s)
     // TODO: Decompress the data and display it properly.
     if (s->pixel_format & GP_PIXEL_FORMAT_COMPRESSED) {
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "[gp%d] Dropping frame as it's compressed.\n", s->index);
+                      "gp%d: dropping frame as it's compressed.\n", s->index);
         return;
     }
 
-    ADP_INFO("[gp%d] Width and height is %dx%d.", s->index, s->buf_width,
+    ADP_INFO("gp%d: width and height is %dx%d.", s->index, s->buf_width,
              s->buf_height);
-    ADP_INFO("[gp%d] Stride is %d.", s->index, s->stride);
+    ADP_INFO("gp%d: stride is %d.", s->index, s->stride);
 
-    if (s->buf_height == 0 || s->buf_width == 0 || s->stride == 0) {
+    if (s->height == 0 || s->width == 0 || s->stride == 0) {
         qemu_log_mask(
             LOG_GUEST_ERROR,
-            "[gp%d] Dropping frame as width, height or stride is zero.\n",
+            "gp%d: dropping frame as width, height or stride is zero.\n",
             s->index);
         return;
     }
 
-    if (s->buf_width > s->disp_width || s->buf_height > s->disp_height) {
+    if (s->width > s->disp_width || s->height > s->disp_height) {
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "[gp%d] Dropping frame as it's larger than the screen.\n",
+                      "gp%d: dropping frame as it's larger than the screen.\n",
                       s->index);
         return;
     }
 
-    uint64_t alloc_size = MAX(s->buf_height * s->buf_width * s->stride, s->end - s->base);
-    if (s->buf_alloc_size != alloc_size) {
-        // qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] before realloc: s->buf_alloc_size 0x%" PRIx64 " alloc_size 0x%" PRIx64 ".\n", s->index, s->buf_alloc_size, alloc_size);
-        s->buf = g_realloc(s->buf, alloc_size);
-        memset(s->buf, 0, alloc_size);
-        s->buf_alloc_size = alloc_size;
+    uint64_t buf_len = MAX(s->height * s->width * s->stride, s->end - s->base);
+    if (s->buf_len != buf_len) {
+        g_free(s->buf);
+        s->buf = g_malloc0(buf_len);
+        s->buf_len = buf_len;
     }
-    if (!s->buf_alloc_size || dma_memory_read(s->dma_as, s->base, s->buf, s->end - s->base,
+    if (dma_memory_read(s->dma_as, s->base, s->buf, s->end - s->base,
                         MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
-        qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] Failed to read from DMA.\n",
+        qemu_log_mask(LOG_GUEST_ERROR, "gp%d: failed to read from DMA.\n",
                       s->index);
         g_free(s->buf);
         s->buf = NULL;
-        s->buf_alloc_size = 0;
-        return;
+        s->buf_len = 0;
     }
-    // qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] buffer_is_zero == %d.\n", s->index, buffer_is_zero(s->buf, s->buf_alloc_size));
 }
 
 static void adp_v4_gp_reg_write(ADPV4GenPipeState *s, hwaddr addr,
@@ -266,7 +261,7 @@ static void adp_v4_gp_reg_write(ADPV4GenPipeState *s, hwaddr addr,
 {
     switch (addr) {
     case REG_GP_CONFIG_CONTROL: {
-        ADP_INFO("[gp%d] Control <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: control <- 0x" HWADDR_FMT_plx, s->index, data);
         s->config_control = (uint32_t)data;
         if (s->config_control & GP_CONFIG_CONTROL_RUN) {
             adp_v4_gp_read(s);
@@ -275,39 +270,39 @@ static void adp_v4_gp_reg_write(ADPV4GenPipeState *s, hwaddr addr,
         break;
     }
     case REG_GP_PIXEL_FORMAT: {
-        ADP_INFO("[gp%d] Pixel format <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: pixel format <- 0x" HWADDR_FMT_plx, s->index, data);
         s->pixel_format = (uint32_t)data;
         break;
     }
     case REG_GP_BASE: {
-        ADP_INFO("[gp%d] Base <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: base <- 0x" HWADDR_FMT_plx, s->index, data);
         s->base = (uint32_t)data;
         break;
     }
     case REG_GP_END: {
-        ADP_INFO("[gp%d] End <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: end <- 0x" HWADDR_FMT_plx, s->index, data);
         s->end = (uint32_t)data;
         break;
     }
     case REG_GP_STRIDE: {
-        ADP_INFO("[gp%d] Stride <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: stride <- 0x" HWADDR_FMT_plx, s->index, data);
         s->stride = (uint32_t)data;
         break;
     }
     case REG_GP_SIZE: {
-        ADP_INFO("[gp%d] Size <- 0x" HWADDR_FMT_plx, s->index, data);
-        s->buf_height = data & 0xFFFF;
-        s->buf_width = (data >> 16) & 0xFFFF;
-        break;
-    }
-    case REG_GP_FRAME_SIZE: {
-        ADP_INFO("[gp%d] Frame Size <- 0x" HWADDR_FMT_plx, s->index, data);
+        ADP_INFO("gp%d: size <- 0x" HWADDR_FMT_plx, s->index, data);
         s->height = data & 0xFFFF;
         s->width = (data >> 16) & 0xFFFF;
         break;
     }
+    case REG_GP_FRAME_SIZE: {
+        ADP_INFO("gp%d: frame size <- 0x" HWADDR_FMT_plx, s->index, data);
+        s->frame_height = data & 0xFFFF;
+        s->frame_width = (data >> 16) & 0xFFFF;
+        break;
+    }
     default: {
-        ADP_INFO("[gp%d] Unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
+        ADP_INFO("gp%d: unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
                  s->index, addr, data);
         break;
     }
@@ -318,37 +313,37 @@ static uint32_t adp_v4_gp_reg_read(ADPV4GenPipeState *s, hwaddr addr)
 {
     switch (addr) {
     case REG_GP_CONFIG_CONTROL: {
-        ADP_INFO("[gp%d] Control -> 0x%x", s->index, s->config_control);
+        ADP_INFO("gp%d: control -> 0x%x", s->index, s->config_control);
         return s->config_control;
     }
     case REG_GP_PIXEL_FORMAT: {
-        ADP_INFO("[gp%d] Pixel format -> 0x%x", s->index, s->pixel_format);
+        ADP_INFO("gp%d: pixel format -> 0x%x", s->index, s->pixel_format);
         return s->pixel_format;
     }
     case REG_GP_BASE: {
-        ADP_INFO("[gp%d] Base -> 0x%x", s->index, s->base);
+        ADP_INFO("gp%d: base -> 0x%x", s->index, s->base);
         return s->base;
     }
     case REG_GP_END: {
-        ADP_INFO("[gp%d] End -> 0x%x", s->index, s->end);
+        ADP_INFO("gp%d: end -> 0x%x", s->index, s->end);
         return s->end;
     }
     case REG_GP_STRIDE: {
-        ADP_INFO("[gp%d] Stride -> 0x%x", s->index, s->stride);
+        ADP_INFO("gp%d: stride -> 0x%x", s->index, s->stride);
         return s->stride;
     }
     case REG_GP_SIZE: {
-        ADP_INFO("[gp%d] Size -> 0x%x", s->index,
+        ADP_INFO("gp%d: size -> 0x%x", s->index,
                  (s->buf_width << 16) | s->buf_height);
-        return (s->buf_width << 16) | s->buf_height;
-    }
-    case REG_GP_FRAME_SIZE: {
-        ADP_INFO("[gp%d] Frame Size -> 0x%x (width: %d height: %d)", s->index,
-                 (s->width << 16) | s->height, s->width, s->height);
         return (s->width << 16) | s->height;
     }
+    case REG_GP_FRAME_SIZE: {
+        ADP_INFO("gp%d: frame size -> 0x%x (width: %d height: %d)", s->index,
+                 (s->width << 16) | s->height, s->width, s->height);
+        return (s->frame_width << 16) | s->frame_height;
+    }
     default: {
-        ADP_INFO("[gp%d] Unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
+        ADP_INFO("gp%d: unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
                  s->index, addr, (hwaddr)0);
         return 0;
     }
@@ -372,7 +367,7 @@ static void adp_v4_blend_reg_write(ADPV4BlendUnitState *s, uint64_t addr,
 {
     switch (addr) {
     case REG_BLEND_LAYER_0_CONFIG: {
-        ADP_INFO("[blend] Layer 0 Config <- 0x" HWADDR_FMT_plx, data);
+        ADP_INFO("blend: layer 0 config <- 0x" HWADDR_FMT_plx, data);
         s->layer_config[0] = (uint32_t)data;
         s->dirty = true;
         break;
@@ -380,11 +375,11 @@ static void adp_v4_blend_reg_write(ADPV4BlendUnitState *s, uint64_t addr,
     case REG_BLEND_LAYER_1_CONFIG: {
         s->layer_config[1] = (uint32_t)data;
         s->dirty = true;
-        ADP_INFO("[blend] Layer 1 Config <- 0x" HWADDR_FMT_plx, data);
+        ADP_INFO("blend: layer 1 config <- 0x" HWADDR_FMT_plx, data);
         break;
     }
     default: {
-        ADP_INFO("[blend] Unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
+        ADP_INFO("blend: unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
                  addr, data);
         break;
     }
@@ -395,15 +390,15 @@ static uint64_t adp_v4_blend_reg_read(ADPV4BlendUnitState *s, uint64_t addr)
 {
     switch (addr) {
     case REG_BLEND_LAYER_0_CONFIG: {
-        ADP_INFO("[blend] Layer 0 Config -> 0x%X", s->layer_config[0]);
+        ADP_INFO("blend: layer 0 config -> 0x%X", s->layer_config[0]);
         return s->layer_config[0];
     }
     case REG_BLEND_LAYER_1_CONFIG: {
-        ADP_INFO("[blend] Layer 1 Config -> 0x%X", s->layer_config[1]);
+        ADP_INFO("blend: layer 1 config -> 0x%X", s->layer_config[1]);
         return s->layer_config[1];
     }
     default: {
-        ADP_INFO("[blend] Unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
+        ADP_INFO("blend: unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
                  addr, (hwaddr)0);
         return 0;
     }
@@ -458,7 +453,7 @@ static void adp_v4_reg_write(void *opaque, hwaddr addr, uint64_t data,
         break;
     }
     default: {
-        ADP_INFO("[disp] Unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
+        ADP_INFO("disp: unknown @ 0x" HWADDR_FMT_plx " <- 0x" HWADDR_FMT_plx,
                  addr, data);
         break;
     }
@@ -476,15 +471,15 @@ static uint64_t adp_v4_reg_read(void *const opaque, const hwaddr addr,
 
     switch (addr >= 0x200000 ? addr - 0x200000 : addr) {
     case REG_CONTROL_VERSION: {
-        ADP_INFO("[disp] Version -> 0x%x", CONTROL_VERSION_A0);
+        ADP_INFO("disp: version -> 0x%x", CONTROL_VERSION_A0);
         return CONTROL_VERSION_A0;
     }
     case REG_CONTROL_FRAME_SIZE: {
-        ADP_INFO("[disp] Frame Size -> 0x%x", (s->width << 16) | s->height);
+        ADP_INFO("disp: frame size -> 0x%x", (s->width << 16) | s->height);
         return (s->width << 16) | s->height;
     }
     case REG_CONTROL_INT_STATUS: {
-        ADP_INFO("[disp] Int Status -> 0x%x", s->int_status);
+        ADP_INFO("disp: int status -> 0x%x", s->int_status);
         return s->int_status;
     }
     case GP_BLOCK_BASE_FOR(0)... GP_BLOCK_END_FOR(0): {
@@ -499,7 +494,7 @@ static uint64_t adp_v4_reg_read(void *const opaque, const hwaddr addr,
         return adp_v4_blend_reg_read(&s->blend_unit, addr - BLEND_BLOCK_BASE);
     }
     default: {
-        ADP_INFO("[disp] Unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
+        ADP_INFO("disp: unknown @ 0x" HWADDR_FMT_plx " -> 0x" HWADDR_FMT_plx,
                  addr, (hwaddr)0);
         return 0;
     }
@@ -645,13 +640,16 @@ static const VMStateDescription vmstate_adp_v4_gp = {
             VMSTATE_UINT16(disp_height, ADPV4GenPipeState),
             VMSTATE_UINT32(config_control, ADPV4GenPipeState),
             VMSTATE_UINT32(pixel_format, ADPV4GenPipeState),
-            VMSTATE_UINT16(width, ADPV4GenPipeState),
-            VMSTATE_UINT16(height, ADPV4GenPipeState),
+            VMSTATE_UINT16(frame_width, ADPV4GenPipeState),
+            VMSTATE_UINT16(frame_height, ADPV4GenPipeState),
             VMSTATE_UINT32(base, ADPV4GenPipeState),
             VMSTATE_UINT32(end, ADPV4GenPipeState),
             VMSTATE_UINT32(stride, ADPV4GenPipeState),
-            VMSTATE_UINT16(buf_width, ADPV4GenPipeState),
-            VMSTATE_UINT16(buf_height, ADPV4GenPipeState),
+            VMSTATE_UINT16(width, ADPV4GenPipeState),
+            VMSTATE_UINT16(height, ADPV4GenPipeState),
+            VMSTATE_UINT32(buf_len, ADPV4GenPipeState),
+            VMSTATE_VBUFFER_ALLOC_UINT32(buf, ADPV4GenPipeState, 0, NULL,
+                                         buf_len),
             VMSTATE_BOOL(dirty, ADPV4GenPipeState),
             VMSTATE_END_OF_LIST(),
         },
@@ -744,8 +742,8 @@ static void adp_v4_update_disp_image_bh(void *opaque)
 
     if ((layer_0_blend == BLEND_MODE_NONE &&
          layer_1_blend == BLEND_MODE_NONE) ||
-        ((layer_0_gp->width == 0 || layer_0_gp->height == 0) &&
-         (layer_1_gp->width == 0 || layer_1_gp->height == 0))) {
+        ((layer_0_gp->frame_width == 0 || layer_0_gp->frame_height == 0) &&
+         (layer_1_gp->frame_width == 0 || layer_1_gp->frame_height == 0))) {
         return;
     }
 
@@ -754,13 +752,12 @@ static void adp_v4_update_disp_image_bh(void *opaque)
          layer_0_blend == BLEND_MODE_NONE)) {
         if (layer_1_gp->base != 0 && layer_1_gp->end != 0) {
             g_assert_nonnull(layer_1_gp->buf);
-            for (i = 0; i < layer_1_gp->buf_height; i += 1) {
+            for (i = 0; i < layer_1_gp->height; i += 1) {
                 off = i * s->width * sizeof(uint32_t);
                 memcpy(adp_v4_get_ram_ptr(s) + off,
                        layer_1_gp->buf + i * layer_1_gp->stride,
-                       layer_1_gp->buf_width * sizeof(uint32_t));
-                adp_v4_set_dirty(s, off,
-                                 layer_1_gp->buf_width * sizeof(uint32_t));
+                       layer_1_gp->width * sizeof(uint32_t));
+                adp_v4_set_dirty(s, off, layer_1_gp->width * sizeof(uint32_t));
             }
         }
         layer_1_gp->dirty = false;
@@ -769,13 +766,12 @@ static void adp_v4_update_disp_image_bh(void *opaque)
                 layer_1_blend == BLEND_MODE_NONE)) {
         if (layer_0_gp->base != 0 && layer_0_gp->end != 0) {
             g_assert_nonnull(layer_0_gp->buf);
-            for (i = 0; i < layer_0_gp->buf_height; i += 1) {
+            for (i = 0; i < layer_0_gp->height; i += 1) {
                 off = i * s->width * sizeof(uint32_t);
                 memcpy(adp_v4_get_ram_ptr(s) + off,
                        layer_0_gp->buf + i * layer_0_gp->stride,
-                       layer_0_gp->buf_width * sizeof(uint32_t));
-                adp_v4_set_dirty(s, off,
-                                 layer_0_gp->buf_width * sizeof(uint32_t));
+                       layer_0_gp->width * sizeof(uint32_t));
+                adp_v4_set_dirty(s, off, layer_0_gp->width * sizeof(uint32_t));
             }
         }
         layer_0_gp->dirty = false;
@@ -786,7 +782,7 @@ static void adp_v4_update_disp_image_bh(void *opaque)
         layer_0_fmt = adp_v4_gp_fmt_to_pixman(layer_0_gp);
         g_assert_cmphex(layer_0_fmt, !=, 0);
         layer_0_img = pixman_image_create_bits(
-            layer_0_fmt, layer_0_gp->buf_width, layer_0_gp->buf_height,
+            layer_0_fmt, layer_0_gp->width, layer_0_gp->height,
             (uint32_t *)layer_0_gp->buf, layer_0_gp->stride);
         g_assert_nonnull(layer_0_img);
 
@@ -794,18 +790,18 @@ static void adp_v4_update_disp_image_bh(void *opaque)
         layer_1_fmt = adp_v4_gp_fmt_to_pixman(layer_1_gp);
         g_assert_cmphex(layer_1_fmt, !=, 0);
         layer_1_img = pixman_image_create_bits(
-            layer_1_fmt, layer_1_gp->buf_width, layer_1_gp->buf_height,
+            layer_1_fmt, layer_1_gp->width, layer_1_gp->height,
             (uint32_t *)layer_1_gp->buf, layer_1_gp->stride);
         g_assert_nonnull(layer_1_img);
 
         adp_v4_blit_rect_black(s, s->width, s->height);
 
         pixman_image_composite(PIXMAN_OP_OVER, layer_0_img, NULL, s->disp_image,
-                               0, 0, 0, 0, 0, 0, layer_0_gp->width,
-                               layer_0_gp->height);
+                               0, 0, 0, 0, 0, 0, layer_0_gp->frame_width,
+                               layer_0_gp->frame_height);
         pixman_image_composite(PIXMAN_OP_OVER, layer_1_img, NULL, s->disp_image,
-                               0, 0, 0, 0, 0, 0, layer_1_gp->width,
-                               layer_1_gp->height);
+                               0, 0, 0, 0, 0, 0, layer_1_gp->frame_width,
+                               layer_1_gp->frame_height);
 
         pixman_image_unref(layer_0_img);
         pixman_image_unref(layer_1_img);
