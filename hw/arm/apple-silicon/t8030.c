@@ -496,16 +496,6 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     virt_end += g_virt_slide;
     phys_ptr = vtop_static(ROUND_UP_16K(virt_end));
 
-    amcc_lower = info->device_tree_addr;
-    amcc_upper =
-        vtop_slid(prelink_info_seg->vmaddr) + prelink_info_seg->vmsize - 1;
-    for (int i = 0; i < 4; i++) {
-        AMCC_REG(t8030_machine, AMCC_LOWER(i)) =
-            (amcc_lower - T8030_DRAM_BASE) >> 14;
-        AMCC_REG(t8030_machine, AMCC_UPPER(i)) =
-            (amcc_upper - T8030_DRAM_BASE) >> 14;
-    }
-
     dtb_va = ptov_static(info->device_tree_addr);
 
     if (machine->initrd_filename != NULL) {
@@ -531,6 +521,15 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     }
     info->sep_fw_size = SEPFW_MAPPING_SIZE;
     phys_ptr += info->sep_fw_size;
+
+    amcc_lower = info->sep_fw_addr;
+    amcc_upper = amcc_lower + info->sep_fw_size - 1;
+    for (int i = 0; i < 4; i++) {
+        AMCC_REG(t8030_machine, AMCC_LOWER(i)) =
+            (amcc_lower - T8030_DRAM_BASE) >> 14;
+        AMCC_REG(t8030_machine, AMCC_UPPER(i)) =
+            (amcc_upper - T8030_DRAM_BASE) >> 14;
+    }
 
     info->kern_boot_args_addr = phys_ptr;
     info->kern_boot_args_size = 0x4000;

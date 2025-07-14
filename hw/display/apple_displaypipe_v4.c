@@ -24,6 +24,7 @@
 #include "hw/irq.h"
 #include "hw/qdev-properties.h"
 #include "migration/vmstate.h"
+#include "qemu/cutils.h"
 #include "qemu/log.h"
 #include "ui/console.h"
 #include "framebuffer.h"
@@ -80,6 +81,7 @@ typedef struct {
     uint16_t buf_width;
     uint16_t buf_height;
     uint8_t *buf;
+    size_t buf_alloc_size;
     bool dirty;
 } ADPV4GenPipeState;
 
@@ -212,15 +214,13 @@ static pixman_format_code_t adp_v4_gp_fmt_to_pixman(ADPV4GenPipeState *s)
     }
 }
 
-static uint8_t *adp_v4_gp_read(ADPV4GenPipeState *s)
+static void adp_v4_gp_read(ADPV4GenPipeState *s)
 {
-    uint8_t *buf;
-
     // TODO: Decompress the data and display it properly.
     if (s->pixel_format & GP_PIXEL_FORMAT_COMPRESSED) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "[gp%d] Dropping frame as it's compressed.\n", s->index);
-        return NULL;
+        return;
     }
 
     ADP_INFO("[gp%d] Width and height is %dx%d.", s->index, s->buf_width,
@@ -232,26 +232,33 @@ static uint8_t *adp_v4_gp_read(ADPV4GenPipeState *s)
             LOG_GUEST_ERROR,
             "[gp%d] Dropping frame as width, height or stride is zero.\n",
             s->index);
-        return NULL;
+        return;
     }
 
     if (s->buf_width > s->disp_width || s->buf_height > s->disp_height) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "[gp%d] Dropping frame as it's larger than the screen.\n",
                       s->index);
-        return NULL;
+        return;
     }
 
-
-    buf = g_malloc(s->buf_height * s->buf_width * s->stride);
-    if (dma_memory_read(s->dma_as, s->base, buf, s->end - s->base,
+    uint64_t alloc_size = MAX(s->buf_height * s->buf_width * s->stride, s->end - s->base);
+    if (s->buf_alloc_size != alloc_size) {
+        // qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] before realloc: s->buf_alloc_size 0x%" PRIx64 " alloc_size 0x%" PRIx64 ".\n", s->index, s->buf_alloc_size, alloc_size);
+        s->buf = g_realloc(s->buf, alloc_size);
+        memset(s->buf, 0, alloc_size);
+        s->buf_alloc_size = alloc_size;
+    }
+    if (!s->buf_alloc_size || dma_memory_read(s->dma_as, s->base, s->buf, s->end - s->base,
                         MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
         qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] Failed to read from DMA.\n",
                       s->index);
-        g_free(buf);
-        return NULL;
+        g_free(s->buf);
+        s->buf = NULL;
+        s->buf_alloc_size = 0;
+        return;
     }
-    return buf;
+    // qemu_log_mask(LOG_GUEST_ERROR, "[gp%d] buffer_is_zero == %d.\n", s->index, buffer_is_zero(s->buf, s->buf_alloc_size));
 }
 
 static void adp_v4_gp_reg_write(ADPV4GenPipeState *s, hwaddr addr,
@@ -262,8 +269,7 @@ static void adp_v4_gp_reg_write(ADPV4GenPipeState *s, hwaddr addr,
         ADP_INFO("[gp%d] Control <- 0x" HWADDR_FMT_plx, s->index, data);
         s->config_control = (uint32_t)data;
         if (s->config_control & GP_CONFIG_CONTROL_RUN) {
-            g_free(s->buf);
-            s->buf = adp_v4_gp_read(s);
+            adp_v4_gp_read(s);
             s->dirty = true;
         }
         break;
