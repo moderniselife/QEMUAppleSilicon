@@ -87,9 +87,7 @@ static const char *KEEP_COMP[] = {
 #ifdef ENABLE_BASEBAND
     "baseband,i19\0$",
 #endif
-#ifdef ENABLE_SEP_SECURITY
     "biosensor,pearl\0$",
-#endif
     "buttons\0$",
     "dart,s8000\0dart,s5l8960x\0$",
     "dart,t8020\0$",
@@ -165,9 +163,6 @@ static const char *REM_NAMES[] = {
     "sep\0$",          "dart-sep\0$",
     "xart-vol\0$",     "pearl-sep\0$",
     "isp\0$",          "xART\0$",
-#endif
-#ifndef ENABLE_SEP_SECURITY // necessary?
-    "pearl-sep\0$",    "isp\0$",
     "Lynx\0$",
 #endif
 #if 1
@@ -186,9 +181,7 @@ static const char *REM_DEV_TYPES[] = {
 #ifndef ENABLE_BASEBAND
     "baseband\0$",      "baseband-spmi\0$",
 #endif
-#ifndef ENABLE_SEP_SECURITY // necessary?
     "spherecontrol\0$",
-#endif
 #if 0
     "aop\0$",
 #endif
@@ -199,7 +192,7 @@ static const char *REM_DEV_TYPES[] = {
 };
 
 static const char *REM_PROPS[] = {
-#ifndef ENABLE_SEP_SECURITY
+#ifndef ENABLE_DATA_ENCRYPTION
     "content-protect",
     "encryptable",
 #endif
@@ -230,10 +223,8 @@ static const char *REM_PROPS[] = {
     "bitrate-2g",
     "navigation",
 #endif
-#ifndef ENABLE_SEP_SECURITY // necessary?
     "pearl-camera",
     "face-detection-support",
-#endif
     "siri-gesture",
 #ifdef ENABLE_BASEBAND
     //"function-pmu_exton_config", // smc-pmu
@@ -525,7 +516,9 @@ void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
     child = dtb_get_node(root, "chosen");
     g_assert_nonnull(child);
 
-#ifndef ENABLE_SEP_SECURITY
+////#ifndef ENABLE_DATA_ENCRYPTION
+#if 0
+    // will cause sep panic: sks 0x996b6
     dtb_set_prop_u32(child, "protected-data-access", 0);
 #endif
 
@@ -555,7 +548,8 @@ void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
 
     child = dtb_get_node(root, "defaults");
     g_assert_nonnull(child);
-#ifndef ENABLE_SEP_SECURITY
+//#ifndef ENABLE_DATA_ENCRYPTION
+#if 0
     dtb_set_prop_null(child, "no-effaceable-storage");
 #endif
 

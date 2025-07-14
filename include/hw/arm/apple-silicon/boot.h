@@ -19,10 +19,10 @@
 
 // #define ENABLE_BASEBAND
 #define ENABLE_SEP
-#define ENABLE_SEP_SECURITY
+#define ENABLE_DATA_ENCRYPTION
 
-#if defined(ENABLE_SEP_SECURITY) && !defined(ENABLE_SEP)
-#error "SEP Security cannot be enabled without SEP"
+#if defined(ENABLE_DATA_ENCRYPTION) && !defined(ENABLE_SEP)
+#error "Data partition encryption cannot be enabled without SEP"
 #endif
 
 #include "qemu/osdep.h"
