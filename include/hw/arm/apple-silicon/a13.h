@@ -57,8 +57,6 @@ typedef struct AppleA13State {
     ARMCPU parent_obj;
 
     /*< public >*/
-    MemoryRegion impl_reg;
-    MemoryRegion coresight_reg;
     MemoryRegion memory;
     MemoryRegion sysmem;
     uint32_t cpu_id;
@@ -66,7 +64,6 @@ typedef struct AppleA13State {
     uint32_t cluster_id;
     uint64_t mpidr;
     uint64_t ipi_sr;
-    hwaddr cluster_reg[2];
     qemu_irq fast_ipi;
     A13_CPREG_VAR_DEF(ARM64_REG_EHID3);
     A13_CPREG_VAR_DEF(ARM64_REG_EHID4);
@@ -112,8 +109,6 @@ typedef struct AppleA13State {
 
 typedef struct AppleA13Cluster {
     CPUClusterState parent_obj;
-    hwaddr base;
-    hwaddr size;
     uint32_t cluster_type;
     MemoryRegion mr;
     AppleA13State *cpus[A13_MAX_CPU];

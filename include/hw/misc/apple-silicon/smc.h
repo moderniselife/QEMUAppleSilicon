@@ -4,14 +4,13 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dtb.h"
 #include "hw/misc/apple-silicon/a7iop/base.h"
-#include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/sysbus.h"
 
 #define APPLE_SMC_MMIO_ASC (1)
 #define APPLE_SMC_MMIO_SRAM (2)
 
 #define TYPE_APPLE_SMC_IOP "apple.smc"
-OBJECT_DECLARE_SIMPLE_TYPE(AppleSMCState, APPLE_SMC_IOP)
+OBJECT_DECLARE_TYPE(AppleSMCState, AppleSMCClass, APPLE_SMC_IOP)
 
 // #define DEBUG_SMC
 

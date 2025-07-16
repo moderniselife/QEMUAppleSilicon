@@ -31,6 +31,7 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
+#include "qemu/memalign.h"
 #include "qemu/queue.h"
 #include "qemu/timer.h"
 #include "arm-powerctl.h"
@@ -120,54 +121,54 @@ static QTAILQ_HEAD(, AppleA13Cluster) clusters =
 static uint64_t ipi_cr = kDeferredIPITimerDefault;
 static QEMUTimer *ipicr_timer = NULL;
 
-inline bool apple_a13_cpu_is_sleep(AppleA13State *tcpu)
+inline bool apple_a13_cpu_is_sleep(AppleA13State *acpu)
 {
-    return CPU(tcpu)->halted;
+    return CPU(acpu)->halted;
 }
 
-inline bool apple_a13_cpu_is_powered_off(AppleA13State *tcpu)
+inline bool apple_a13_cpu_is_powered_off(AppleA13State *acpu)
 {
-    return ARM_CPU(tcpu)->power_state == PSCI_OFF;
+    return ARM_CPU(acpu)->power_state == PSCI_OFF;
 }
 
-void apple_a13_cpu_start(AppleA13State *tcpu)
+void apple_a13_cpu_start(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(tcpu)->power_state != PSCI_ON) {
-        ret = arm_set_cpu_on_and_reset(tcpu->mpidr);
+    if (ARM_CPU(acpu)->power_state != PSCI_ON) {
+        ret = arm_set_cpu_on_and_reset(acpu->mpidr);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
-        error_report("Failed to bring up CPU %d: err %d", tcpu->cpu_id, ret);
+        error_report("Failed to bring up CPU %d: err %d", acpu->cpu_id, ret);
     }
 }
 
-void apple_a13_cpu_reset(AppleA13State *tcpu)
+void apple_a13_cpu_reset(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(tcpu)->power_state != PSCI_OFF) {
-        ret = arm_reset_cpu(tcpu->mpidr);
+    if (ARM_CPU(acpu)->power_state != PSCI_OFF) {
+        ret = arm_reset_cpu(acpu->mpidr);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
         error_report("%s: failed to reset CPU %d: err %d", __func__,
-                     tcpu->cpu_id, ret);
+                     acpu->cpu_id, ret);
     }
 }
 
-void apple_a13_cpu_off(AppleA13State *tcpu)
+void apple_a13_cpu_off(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(tcpu)->power_state != PSCI_OFF) {
-        ret = arm_set_cpu_off(tcpu->mpidr);
+    if (ARM_CPU(acpu)->power_state != PSCI_OFF) {
+        ret = arm_set_cpu_off(acpu->mpidr);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
         error_report("%s: failed to turn off CPU %d: err %d", __func__,
-                     tcpu->cpu_id, ret);
+                     acpu->cpu_id, ret);
     }
 }
 
@@ -184,8 +185,8 @@ static AppleA13Cluster *apple_a13_find_cluster(int cluster_id)
 static uint64_t apple_a13_cluster_cpreg_read(CPUARMState *env,
                                              const ARMCPRegInfo *ri)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
-    AppleA13Cluster *c = apple_a13_find_cluster(tcpu->cluster_id);
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
+    AppleA13Cluster *c = apple_a13_find_cluster(acpu->cluster_id);
 
     if (unlikely(!c)) {
         return 0;
@@ -198,8 +199,8 @@ static void apple_a13_cluster_cpreg_write(CPUARMState *env,
                                           const ARMCPRegInfo *ri,
                                           uint64_t value)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
-    AppleA13Cluster *c = apple_a13_find_cluster(tcpu->cluster_id);
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
+    AppleA13Cluster *c = apple_a13_find_cluster(acpu->cluster_id);
 
     if (unlikely(!c)) {
         return;
@@ -243,19 +244,17 @@ static int add_cpu_to_cluster(Object *obj, void *opaque)
 {
     AppleA13Cluster *cluster = APPLE_A13_CLUSTER(opaque);
     CPUState *cpu = (CPUState *)object_dynamic_cast(obj, TYPE_CPU);
-    AppleA13State *tcpu =
+    AppleA13State *acpu =
         (AppleA13State *)object_dynamic_cast(obj, TYPE_APPLE_A13);
 
     if (!cpu) {
         return 0;
     }
     cpu->cluster_index = CPU_CLUSTER(cluster)->cluster_id;
-    if (!tcpu) {
+    if (!acpu) {
         return 0;
     }
-    cluster->base = tcpu->cluster_reg[0];
-    cluster->size = tcpu->cluster_reg[1];
-    cluster->cpus[tcpu->cpu_id] = tcpu;
+    cluster->cpus[acpu->cpu_id] = acpu;
     return 0;
 }
 
@@ -263,13 +262,6 @@ static void apple_a13_cluster_realize(DeviceState *dev, Error **errp)
 {
     AppleA13Cluster *cluster = APPLE_A13_CLUSTER(dev);
     object_child_foreach_recursive(OBJECT(cluster), add_cpu_to_cluster, dev);
-
-    if (cluster->size) {
-        memory_region_init_ram_device_ptr(
-            &cluster->mr, OBJECT(cluster),
-            TYPE_APPLE_A13_CLUSTER ".cpm-impl-reg", cluster->size,
-            g_aligned_alloc0(1, cluster->size, 0x4000));
-    }
 }
 
 static void apple_a13_cluster_tick(AppleA13Cluster *c)
@@ -335,10 +327,10 @@ static void apple_a13_cluster_instance_init(Object *obj)
 static void apple_a13_ipi_rr_local(CPUARMState *env, const ARMCPRegInfo *ri,
                                    uint64_t value)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
 
-    uint32_t phys_id = (value & 0xff) | (tcpu->cluster_id << 8);
-    AppleA13Cluster *c = apple_a13_find_cluster(tcpu->cluster_id);
+    uint32_t phys_id = (value & 0xff) | (acpu->cluster_id << 8);
+    AppleA13Cluster *c = apple_a13_find_cluster(acpu->cluster_id);
     uint32_t cpu_id = -1;
     int i;
 
@@ -355,28 +347,28 @@ static void apple_a13_ipi_rr_local(CPUARMState *env, const ARMCPRegInfo *ri,
         qemu_log_mask(LOG_GUEST_ERROR,
                       "CPU %x failed to send fast IPI to local CPU %x: value: "
                       "0x" HWADDR_FMT_plx "\n",
-                      tcpu->phys_id, phys_id, value);
+                      acpu->phys_id, phys_id, value);
         return;
     }
 
     switch (value & IPI_RR_TYPE_MASK) {
     case IPI_RR_TYPE_NOWAKE:
         if (apple_a13_cpu_is_sleep(c->cpus[cpu_id])) {
-            c->noWakeIPI[tcpu->cpu_id][cpu_id] = 1;
+            c->noWakeIPI[acpu->cpu_id][cpu_id] = 1;
         } else {
-            apple_a13_cluster_deliver_ipi(c, cpu_id, tcpu->cpu_id,
+            apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
                                           IPI_RR_TYPE_IMMEDIATE);
         }
         break;
     case IPI_RR_TYPE_DEFERRED:
-        c->deferredIPI[tcpu->cpu_id][cpu_id] = 1;
+        c->deferredIPI[acpu->cpu_id][cpu_id] = 1;
         break;
     case IPI_RR_TYPE_RETRACT:
-        c->deferredIPI[tcpu->cpu_id][cpu_id] = 0;
-        c->noWakeIPI[tcpu->cpu_id][cpu_id] = 0;
+        c->deferredIPI[acpu->cpu_id][cpu_id] = 0;
+        c->noWakeIPI[acpu->cpu_id][cpu_id] = 0;
         break;
     case IPI_RR_TYPE_IMMEDIATE:
-        apple_a13_cluster_deliver_ipi(c, cpu_id, tcpu->cpu_id,
+        apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
                                       IPI_RR_TYPE_IMMEDIATE);
         break;
     default:
@@ -389,7 +381,7 @@ static void apple_a13_ipi_rr_local(CPUARMState *env, const ARMCPRegInfo *ri,
 static void apple_a13_ipi_rr_global(CPUARMState *env, const ARMCPRegInfo *ri,
                                     uint64_t value)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
     uint32_t cluster_id = (value >> IPI_RR_TARGET_CLUSTER_SHIFT) & 0xff;
     AppleA13Cluster *c = apple_a13_find_cluster(cluster_id);
 
@@ -415,28 +407,28 @@ static void apple_a13_ipi_rr_global(CPUARMState *env, const ARMCPRegInfo *ri,
         qemu_log_mask(LOG_GUEST_ERROR,
                       "CPU %x failed to send fast IPI to global CPU %x: value: "
                       "0x" HWADDR_FMT_plx "\n",
-                      tcpu->phys_id, phys_id, value);
+                      acpu->phys_id, phys_id, value);
         return;
     }
 
     switch (value & IPI_RR_TYPE_MASK) {
     case IPI_RR_TYPE_NOWAKE:
         if (apple_a13_cpu_is_sleep(c->cpus[cpu_id])) {
-            c->noWakeIPI[tcpu->cpu_id][cpu_id] = 1;
+            c->noWakeIPI[acpu->cpu_id][cpu_id] = 1;
         } else {
-            apple_a13_cluster_deliver_ipi(c, cpu_id, tcpu->cpu_id,
+            apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
                                           IPI_RR_TYPE_IMMEDIATE);
         }
         break;
     case IPI_RR_TYPE_DEFERRED:
-        c->deferredIPI[tcpu->cpu_id][cpu_id] = 1;
+        c->deferredIPI[acpu->cpu_id][cpu_id] = 1;
         break;
     case IPI_RR_TYPE_RETRACT:
-        c->deferredIPI[tcpu->cpu_id][cpu_id] = 0;
-        c->noWakeIPI[tcpu->cpu_id][cpu_id] = 0;
+        c->deferredIPI[acpu->cpu_id][cpu_id] = 0;
+        c->noWakeIPI[acpu->cpu_id][cpu_id] = 0;
         break;
     case IPI_RR_TYPE_IMMEDIATE:
-        apple_a13_cluster_deliver_ipi(c, cpu_id, tcpu->cpu_id,
+        apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
                                       IPI_RR_TYPE_IMMEDIATE);
         break;
     default:
@@ -448,29 +440,29 @@ static void apple_a13_ipi_rr_global(CPUARMState *env, const ARMCPRegInfo *ri,
 /* Receiving IPI */
 static uint64_t apple_a13_ipi_read_sr(CPUARMState *env, const ARMCPRegInfo *ri)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
 
-    g_assert_cmphex(env_archcpu(env)->mp_affinity, ==, tcpu->mpidr);
-    return tcpu->ipi_sr;
+    g_assert_cmphex(env_archcpu(env)->mp_affinity, ==, acpu->mpidr);
+    return acpu->ipi_sr;
 }
 
 /* Acknowledge received IPI */
 static void apple_a13_ipi_write_sr(CPUARMState *env, const ARMCPRegInfo *ri,
                                    uint64_t value)
 {
-    AppleA13State *tcpu = APPLE_A13(env_archcpu(env));
-    AppleA13Cluster *c = apple_a13_find_cluster(tcpu->cluster_id);
+    AppleA13State *acpu = APPLE_A13(env_archcpu(env));
+    AppleA13Cluster *c = apple_a13_find_cluster(acpu->cluster_id);
     uint64_t src_cpu = IPI_SR_SRC_CPU(value);
 
-    tcpu->ipi_sr = 0;
-    qemu_irq_lower(tcpu->fast_ipi);
+    acpu->ipi_sr = 0;
+    qemu_irq_lower(acpu->fast_ipi);
 
     switch (value & IPI_RR_TYPE_MASK) {
     case IPI_RR_TYPE_NOWAKE:
-        c->noWakeIPI[src_cpu][tcpu->cpu_id] = 0;
+        c->noWakeIPI[src_cpu][acpu->cpu_id] = 0;
         break;
     case IPI_RR_TYPE_DEFERRED:
-        c->deferredIPI[src_cpu][tcpu->cpu_id] = 0;
+        c->deferredIPI[src_cpu][acpu->cpu_id] = 0;
         break;
     default:
         break;
@@ -611,31 +603,31 @@ static const ARMCPRegInfo apple_a13_cp_reginfo_tcg[] = {
     },
 };
 
-static void apple_a13_add_cpregs(AppleA13State *tcpu)
+static void apple_a13_add_cpregs(AppleA13State *acpu)
 {
-    ARMCPU *cpu = ARM_CPU(tcpu);
+    ARMCPU *cpu = ARM_CPU(acpu);
     define_arm_cp_regs(cpu, apple_a13_cp_reginfo_tcg);
-    apple_a13_init_gxf(tcpu);
+    apple_a13_init_gxf(acpu);
 }
 
 static void apple_a13_realize(DeviceState *dev, Error **errp)
 {
-    AppleA13State *tcpu = APPLE_A13(dev);
+    AppleA13State *acpu = APPLE_A13(dev);
     AppleA13Class *tclass = APPLE_A13_GET_CLASS(dev);
     DeviceState *fiq_or;
     Object *obj = OBJECT(dev);
 
-    object_property_set_link(OBJECT(tcpu), "memory", OBJECT(&tcpu->memory),
+    object_property_set_link(OBJECT(acpu), "memory", OBJECT(&acpu->memory),
                              errp);
     if (*errp) {
         return;
     }
-    apple_a13_add_cpregs(tcpu);
+    apple_a13_add_cpregs(acpu);
     tclass->parent_realize(dev, errp);
     if (*errp) {
         return;
     }
-    apple_a13_init_gxf_override(tcpu);
+    apple_a13_init_gxf_override(acpu);
     fiq_or = qdev_new(TYPE_OR_IRQ);
     object_property_add_child(obj, "fiq-or", OBJECT(fiq_or));
     qdev_prop_set_uint16(fiq_or, "num-lines", 16);
@@ -646,7 +638,7 @@ static void apple_a13_realize(DeviceState *dev, Error **errp)
     qdev_connect_gpio_out(fiq_or, 0, qdev_get_gpio_in(dev, ARM_CPU_FIQ));
 
     qdev_connect_gpio_out(dev, GTIMER_VIRT, qdev_get_gpio_in(fiq_or, 0));
-    tcpu->fast_ipi = qdev_get_gpio_in(fiq_or, 1);
+    acpu->fast_ipi = qdev_get_gpio_in(fiq_or, 1);
 }
 
 static void apple_a13_reset_hold(Object *obj, ResetType type)
@@ -673,7 +665,7 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
                                     uint8_t cluster_type)
 {
     DeviceState *dev;
-    AppleA13State *tcpu;
+    AppleA13State *acpu;
     ARMCPU *cpu;
     Object *obj;
     DTBProp *prop;
@@ -681,8 +673,8 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
 
     obj = object_new(TYPE_APPLE_A13);
     dev = DEVICE(obj);
-    tcpu = APPLE_A13(dev);
-    cpu = ARM_CPU(tcpu);
+    acpu = APPLE_A13(dev);
+    cpu = ARM_CPU(acpu);
 
     if (node) {
         prop = dtb_find_prop(node, "name");
@@ -690,23 +682,23 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
 
         prop = dtb_find_prop(node, "cpu-id");
         g_assert_cmpuint(prop->length, ==, 4);
-        tcpu->cpu_id = *(unsigned int *)prop->data;
+        acpu->cpu_id = *(unsigned int *)prop->data;
 
         prop = dtb_find_prop(node, "reg");
         g_assert_cmpuint(prop->length, ==, 4);
-        tcpu->phys_id = *(unsigned int *)prop->data;
+        acpu->phys_id = *(unsigned int *)prop->data;
 
         prop = dtb_find_prop(node, "cluster-id");
         g_assert_cmpuint(prop->length, ==, 4);
-        tcpu->cluster_id = *(unsigned int *)prop->data;
+        acpu->cluster_id = *(unsigned int *)prop->data;
     } else {
         dev->id = g_strdup(name);
-        tcpu->cpu_id = cpu_id;
-        tcpu->phys_id = phys_id;
-        tcpu->cluster_id = cluster_id;
+        acpu->cpu_id = cpu_id;
+        acpu->phys_id = phys_id;
+        acpu->cluster_id = cluster_id;
     }
 
-    tcpu->mpidr = tcpu->phys_id | (1LL << 31);
+    acpu->mpidr = acpu->phys_id | (1LL << 31);
 
     cpu->midr = FIELD_DP64(0, MIDR_EL1, IMPLEMENTER, 0x61); /* Apple */
     /* chip-revision = (variant << 4) | (revision) */
@@ -719,7 +711,7 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
     }
     switch (cluster_type) {
     case 'P': // Lightning
-        tcpu->mpidr |= (1 << ARM_AFF2_SHIFT);
+        acpu->mpidr |= (1 << ARM_AFF2_SHIFT);
         cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, PARTNUM, 0x12);
         break;
     case 'E': // Thunder
@@ -729,14 +721,14 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
         break;
     }
 
-    object_property_set_uint(obj, "mp-affinity", tcpu->mpidr, &error_fatal);
+    object_property_set_uint(obj, "mp-affinity", acpu->mpidr, &error_fatal);
 
     if (node != NULL) {
         dtb_remove_prop_named(node, "reg-private");
         dtb_remove_prop_named(node, "cpu-uttdbg-reg");
     }
 
-    if (tcpu->cpu_id == 0 || node == NULL) {
+    if (acpu->cpu_id == 0 || node == NULL) {
         if (node != NULL) {
             dtb_set_prop_str(node, "state", "running");
         }
@@ -760,51 +752,21 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
 
     object_property_set_bool(obj, "has_el3", false, NULL);
     object_property_set_bool(obj, "has_el2", false, NULL);
-    object_property_set_bool(obj, "pmu", false, NULL); // KVM will throw up otherwise
+    object_property_set_bool(obj, "pmu", false,
+                             NULL); // KVM will throw up otherwise
 
-    memory_region_init(&tcpu->memory, obj, "cpu-memory", UINT64_MAX);
-    memory_region_init_alias(&tcpu->sysmem, obj, "sysmem", get_system_memory(),
+    memory_region_init(&acpu->memory, obj, "cpu-memory", UINT64_MAX);
+    memory_region_init_alias(&acpu->sysmem, obj, "sysmem", get_system_memory(),
                              0, UINT64_MAX);
-    memory_region_add_subregion_overlap(&tcpu->memory, 0, &tcpu->sysmem, -2);
+    memory_region_add_subregion_overlap(&acpu->memory, 0, &acpu->sysmem, -2);
 
     if (node) {
-        prop = dtb_find_prop(node, "cpu-impl-reg");
-        if (prop) {
-            g_assert_cmpuint(prop->length, ==, 16);
-
-            reg = (uint64_t *)prop->data;
-
-            memory_region_init_ram_device_ptr(&tcpu->impl_reg, obj,
-                                              TYPE_APPLE_A13 ".impl-reg",
-                                              reg[1],
-                                              g_aligned_alloc0(1, reg[1],
-                                                               0x4000));
-            memory_region_add_subregion(get_system_memory(), reg[0],
-                                        &tcpu->impl_reg);
-        }
-
-        prop = dtb_find_prop(node, "coresight-reg");
-        if (prop) {
-            g_assert_cmpuint(prop->length, ==, 16);
-
-            reg = (uint64_t *)prop->data;
-
-            memory_region_init_ram_device_ptr(&tcpu->coresight_reg, obj,
-                                              TYPE_APPLE_A13 ".coresight-reg",
-                                              reg[1],
-                                              g_aligned_alloc0(1, reg[1],
-                                                               0x4000));
-            memory_region_add_subregion(get_system_memory(), reg[0],
-                                        &tcpu->coresight_reg);
-        }
-
-        prop = dtb_find_prop(node, "cpm-impl-reg");
-        if (prop) {
-            g_assert_cmpuint(prop->length, ==, 16);
-            memcpy(tcpu->cluster_reg, prop->data, prop->length);
-        }
+        // dtb_remove_prop_named(node, "cpu-impl-reg");
+        dtb_remove_prop_named(node, "coresight-reg");
+        // dtb_remove_prop_named(node, "cpm-impl-reg");
     }
-    return tcpu;
+
+    return acpu;
 }
 
 static const Property apple_a13_cluster_properties[] = {

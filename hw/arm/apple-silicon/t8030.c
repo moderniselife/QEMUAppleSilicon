@@ -1211,11 +1211,6 @@ static void t8030_cluster_realize(T8030MachineState *t8030_machine)
 {
     for (int i = 0; i < A13_MAX_CLUSTER; i++) {
         qdev_realize(DEVICE(&t8030_machine->clusters[i]), NULL, &error_fatal);
-        if (t8030_machine->clusters[i].base) {
-            memory_region_add_subregion(get_system_memory(),
-                                        t8030_machine->clusters[i].base,
-                                        &t8030_machine->clusters[i].mr);
-        }
     }
 }
 

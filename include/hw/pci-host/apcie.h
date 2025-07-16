@@ -65,11 +65,11 @@ typedef struct ApplePCIEMSIBank {
 } ApplePCIEMSIBank;
 
 typedef struct ApplePCIEMSI {
-    uint64_t     base;
+    uint64_t base;
     MemoryRegion iomem;
 
 #define APPLE_PCIE_NUM_MSI_BANKS 1
-//#define APPLE_PCIE_NUM_MSI_BANKS 8
+    // #define APPLE_PCIE_NUM_MSI_BANKS 8
 
     ApplePCIEMSIBank intr[APPLE_PCIE_NUM_MSI_BANKS];
 } ApplePCIEMSI;
@@ -109,7 +109,7 @@ struct ApplePCIEPort {
 
     ApplePCIEHost *host;
 #if 1
-    //qemu_irq msi_irqs[8];
+    // qemu_irq msi_irqs[8];
     ApplePCIEMSI msi;
 #endif
     MemoryRegion *dma_mr;

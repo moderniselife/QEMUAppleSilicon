@@ -524,7 +524,7 @@ static void apple_spmi_init(Object *obj)
 
     memory_region_init_ram_device_ptr(
         &s->iomems[2], obj, TYPE_APPLE_SPMI ".fault_counter_reg",
-        sizeof(s->fault_counter_reg), &s->fault_counter_reg);
+        sizeof(s->fault_counter_reg), s->fault_counter_reg);
 
     memory_region_init_io(&s->iomems[3], obj, &apple_spmi_control_ops, s,
                           TYPE_APPLE_SPMI ".control_reg",

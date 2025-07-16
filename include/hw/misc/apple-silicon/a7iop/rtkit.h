@@ -84,7 +84,7 @@ struct AppleRTKitClass {
     SysBusDevice base_class;
 
     /*< public >*/
-    ResettablePhases parent_reset;
+    ResettablePhases parent_phases;
 };
 
 struct AppleRTKit {

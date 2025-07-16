@@ -27,6 +27,7 @@
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
+#include "qemu/memalign.h"
 #include "arm-powerctl.h"
 #include "target/arm/cpregs.h"
 
@@ -51,26 +52,26 @@
                        offsetof(ARMCPU, env),                              \
     }
 
-inline bool apple_a9_cpu_is_sleep(AppleA9State *tcpu)
+inline bool apple_a9_cpu_is_sleep(AppleA9State *acpu)
 {
-    return CPU(tcpu)->halted;
+    return CPU(acpu)->halted;
 }
 
-inline bool apple_a9_cpu_is_powered_off(AppleA9State *tcpu)
+inline bool apple_a9_cpu_is_powered_off(AppleA9State *acpu)
 {
-    return ARM_CPU(tcpu)->power_state == PSCI_OFF;
+    return ARM_CPU(acpu)->power_state == PSCI_OFF;
 }
 
-void apple_a9_cpu_start(AppleA9State *tcpu)
+void apple_a9_cpu_start(AppleA9State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(tcpu)->power_state != PSCI_ON) {
-        ret = arm_set_cpu_on_and_reset(tcpu->mpidr);
+    if (ARM_CPU(acpu)->power_state != PSCI_ON) {
+        ret = arm_set_cpu_on_and_reset(acpu->mpidr);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
-        error_report("Failed to bring up CPU %d: err %d", tcpu->cpu_id, ret);
+        error_report("Failed to bring up CPU %d: err %d", acpu->cpu_id, ret);
     }
 }
 
@@ -108,25 +109,25 @@ static const ARMCPRegInfo a9_cp_reginfo_tcg[] = {
     A9_CPREG_DEF(MMU_ERR_STS, 3, 6, 15, 0, 0, PL1_RW, 0),
 };
 
-static void a9_add_cpregs(AppleA9State *tcpu)
+static void a9_add_cpregs(AppleA9State *acpu)
 {
-    ARMCPU *cpu = ARM_CPU(tcpu);
+    ARMCPU *cpu = ARM_CPU(acpu);
     define_arm_cp_regs(cpu, a9_cp_reginfo_tcg);
 }
 
 static void apple_a9_realize(DeviceState *dev, Error **errp)
 {
-    AppleA9State *tcpu = APPLE_A9(dev);
+    AppleA9State *acpu = APPLE_A9(dev);
     AppleA9Class *tclass = APPLE_A9_GET_CLASS(dev);
     DeviceState *fiq_or;
     Object *obj = OBJECT(dev);
 
-    object_property_set_link(OBJECT(tcpu), "memory", OBJECT(&tcpu->memory),
+    object_property_set_link(OBJECT(acpu), "memory", OBJECT(&acpu->memory),
                              errp);
     if (*errp) {
         return;
     }
-    a9_add_cpregs(tcpu);
+    a9_add_cpregs(acpu);
     tclass->parent_realize(dev, errp);
     if (*errp) {
         return;
@@ -158,7 +159,7 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
                               uint32_t phys_id)
 {
     DeviceState *dev;
-    AppleA9State *tcpu;
+    AppleA9State *acpu;
     ARMCPU *cpu;
     Object *obj;
     DTBProp *prop;
@@ -166,8 +167,8 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
 
     obj = object_new(TYPE_APPLE_A9);
     dev = DEVICE(obj);
-    tcpu = APPLE_A9(dev);
-    cpu = ARM_CPU(tcpu);
+    acpu = APPLE_A9(dev);
+    cpu = ARM_CPU(acpu);
 
     if (node) {
         prop = dtb_find_prop(node, "name");
@@ -175,18 +176,18 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
 
         prop = dtb_find_prop(node, "cpu-id");
         g_assert_cmpuint(prop->length, ==, 4);
-        tcpu->cpu_id = *(unsigned int *)prop->data;
+        acpu->cpu_id = *(unsigned int *)prop->data;
 
         prop = dtb_find_prop(node, "reg");
         g_assert_cmpuint(prop->length, ==, 4);
-        tcpu->phys_id = *(unsigned int *)prop->data;
+        acpu->phys_id = *(unsigned int *)prop->data;
     } else {
         dev->id = g_strdup(name);
-        tcpu->cpu_id = cpu_id;
-        tcpu->phys_id = phys_id;
+        acpu->cpu_id = cpu_id;
+        acpu->phys_id = phys_id;
     }
 
-    tcpu->mpidr = tcpu->phys_id | (1LL << 31) | (1 << ARM_AFF2_SHIFT);
+    acpu->mpidr = acpu->phys_id | (1LL << 31) | (1 << ARM_AFF2_SHIFT);
 
     cpu->midr = FIELD_DP64(0, MIDR_EL1, IMPLEMENTER, 0x61);
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, ARCHITECTURE, 0xf);
@@ -197,14 +198,14 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
     cpu->isar.id_aa64mmfr1 =
         FIELD_DP64(cpu->isar.id_aa64mmfr1, ID_AA64MMFR1, PAN, 0);
 
-    object_property_set_uint(obj, "mp-affinity", tcpu->mpidr, &error_fatal);
+    object_property_set_uint(obj, "mp-affinity", acpu->mpidr, &error_fatal);
 
     if (node != NULL) {
         dtb_remove_prop_named(node, "reg-private");
         dtb_remove_prop_named(node, "cpu-uttdbg-reg");
     }
 
-    if (tcpu->cpu_id == 0 || node == NULL) {
+    if (acpu->cpu_id == 0 || node == NULL) {
         if (node != NULL) {
             dtb_set_prop_str(node, "state", "running");
         }
@@ -225,45 +226,20 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
 
     object_property_set_bool(obj, "has_el3", true, NULL);
     object_property_set_bool(obj, "has_el2", true, NULL);
-    object_property_set_bool(obj, "pmu", false, NULL); // KVM will throw up otherwise
+    object_property_set_bool(obj, "pmu", false,
+                             NULL); // KVM will throw up otherwise
 
-    memory_region_init(&tcpu->memory, obj, "cpu-memory", UINT64_MAX);
-    memory_region_init_alias(&tcpu->sysmem, obj, "sysmem", get_system_memory(),
+    memory_region_init(&acpu->memory, obj, "cpu-memory", UINT64_MAX);
+    memory_region_init_alias(&acpu->sysmem, obj, "sysmem", get_system_memory(),
                              0, UINT64_MAX);
-    memory_region_add_subregion_overlap(&tcpu->memory, 0, &tcpu->sysmem, -2);
+    memory_region_add_subregion_overlap(&acpu->memory, 0, &acpu->sysmem, -2);
 
     if (node) {
-        prop = dtb_find_prop(node, "cpu-impl-reg");
-        if (prop) {
-            g_assert_cmpuint(prop->length, ==, 16);
-
-            reg = (uint64_t *)prop->data;
-
-            memory_region_init_ram_device_ptr(&tcpu->impl_reg, obj,
-                                              TYPE_APPLE_A9 ".impl-reg", reg[1],
-                                              g_aligned_alloc0(1, reg[1],
-                                                               0x4000));
-            memory_region_add_subregion(get_system_memory(), reg[0],
-                                        &tcpu->impl_reg);
-        }
-
-        prop = dtb_find_prop(node, "coresight-reg");
-        if (prop) {
-            g_assert_cmpuint(prop->length, ==, 16);
-
-            reg = (uint64_t *)prop->data;
-
-            memory_region_init_ram_device_ptr(&tcpu->coresight_reg, obj,
-                                              TYPE_APPLE_A9 ".coresight-reg",
-                                              reg[1],
-                                              g_aligned_alloc0(1, reg[1],
-                                                               0x4000));
-            memory_region_add_subregion(get_system_memory(), reg[0],
-                                        &tcpu->coresight_reg);
-        }
+        // dtb_remove_prop_named(node, "cpu-impl-reg");
+        dtb_remove_prop_named(node, "coresight-reg");
     }
 
-    return tcpu;
+    return acpu;
 }
 
 static const VMStateDescription vmstate_apple_a9 = {

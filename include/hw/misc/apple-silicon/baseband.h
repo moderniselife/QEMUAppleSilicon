@@ -21,20 +21,16 @@
 #define HW_MISC_APPLE_SILICON_BASEBAND_H
 
 #include "hw/arm/apple-silicon/dtb.h"
-#include "hw/pci/pci.h"
-#include "hw/pci/pci_bus.h"
-//#include "hw/pci/pci_device.h"
-#include "hw/pci/pcie_host.h"
 #include "hw/pci-host/apcie.h"
+#include "hw/pci/pci.h"
 #include "hw/sysbus.h"
-#include "qemu/queue.h"
-#include "qom/object.h"
 
 #define BASEBAND_GPIO_COREDUMP "baseband-gpio-coredump"
 // #define BASEBAND_GPIO_RESET_DET "baseband-gpio-reset_det"
 #define BASEBAND_GPIO_RESET_DET_IN "baseband-gpio-reset_det-in"
 #define BASEBAND_GPIO_RESET_DET_OUT "baseband-gpio-reset_det-out"
 
-SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus, ApplePCIEPort *port);
+SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
+                                    ApplePCIEPort *port);
 
 #endif /* HW_MISC_APPLE_SILICON_BASEBAND_H */

@@ -1,10 +1,12 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dtb.h"
+#include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/smc.h"
 #include "hw/qdev-core.h"
 #include "migration/vmstate.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
+#include "qemu/memalign.h"
 #include "qemu/module.h"
 #include "qemu/queue.h"
 #include "system/runstate.h"
@@ -31,6 +33,12 @@ typedef struct {
         uint64_t raw;
     };
 } QEMU_PACKED KeyResponse;
+
+struct AppleSMCClass {
+    AppleRTKitClass parent_class;
+
+    ResettablePhases parent_phases;
+};
 
 struct AppleSMCState {
     AppleRTKit parent_obj;
@@ -379,9 +387,11 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     uint16_t battery_average_time_to_full = 0xffff; // not charging
     uint32_t battery_max_capacity = 31337;
     uint32_t battery_full_charge_capacity = battery_max_capacity * 0.98;
-    // *0.69 shows as 67%/68% (console debug output) with full_charge_capacity of 98%
+    // *0.69 shows as 67%/68% (console debug output) with full_charge_capacity
+    // of 98%
     uint32_t battery_current_capacity = battery_full_charge_capacity * 0.69;
-    uint32_t battery_remaining_capacity = battery_full_charge_capacity - battery_current_capacity;
+    uint32_t battery_remaining_capacity =
+        battery_full_charge_capacity - battery_current_capacity;
     // b0fv might mean "battery full voltage"
     uint16_t b0fv = 0x201;
     uint8_t battery_count = 0x1;
@@ -413,7 +423,7 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     sysbus_init_mmio(sbd, s->iomems[APPLE_SMC_MMIO_ASC]);
 
     s->iomems[APPLE_SMC_MMIO_SRAM] = g_new(MemoryRegion, 1);
-    s->sram = g_aligned_alloc0(1, sram_size, 0x4000);
+    s->sram = qemu_memalign(qemu_real_host_page_size(), sram_size);
     s->sram_size = sram_size;
     memory_region_init_ram_device_ptr(s->iomems[APPLE_SMC_MMIO_SRAM],
                                       OBJECT(dev), TYPE_APPLE_SMC_IOP ".sram",
@@ -454,8 +464,8 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
 
     apple_smc_create_key(s, 'AC-N', 1, SMCKeyTypeUInt8, SMC_ATTR_DEFAULT_LE,
                          &ac_adapter_count);
-    apple_smc_create_key(s, 'AC-W', 1, SMCKeyTypeSInt8, SMC_ATTR_DEFAULT_LE | SMC_ATTR_READABLE,
-                         &ac_w);
+    apple_smc_create_key(s, 'AC-W', 1, SMCKeyTypeSInt8,
+                         SMC_ATTR_DEFAULT_LE | SMC_ATTR_READABLE, &ac_w);
     apple_smc_create_key(s, 'CHAI', 4, SMCKeyTypeUInt32, SMC_ATTR_DEFAULT_LE,
                          NULL);
     apple_smc_create_key(s, 'TG0B', 8, SMCKeyTypeIOFT, SMC_ATTR_DEFAULT_LE,
@@ -535,10 +545,12 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                          NULL);
 
 #if 1
-    apple_smc_create_key(s, 'BHTL', 1, SMCKeyTypeFlag,
-                         SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_WRITEABLE | SMC_ATTR_READABLE, NULL);
+    apple_smc_create_key(
+        s, 'BHTL', 1, SMCKeyTypeFlag,
+        SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_WRITEABLE | SMC_ATTR_READABLE, NULL);
     apple_smc_create_key(s, 'BFS0', 1, SMCKeyTypeUInt8,
-                         SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_READABLE, &battery_feature_flags);
+                         SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_READABLE,
+                         &battery_feature_flags);
     apple_smc_create_key(s, 'B0CT', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
                          &battery_cycle_count);
     apple_smc_create_key(s, 'B0TF', 2, SMCKeyTypeUInt16, SMC_ATTR_DEFAULT_LE,
@@ -670,20 +682,42 @@ static const VMStateDescription vmstate_apple_smc = {
             VMSTATE_QTAILQ_V(key_data, AppleSMCState, 0,
                              vmstate_apple_smc_key_data, SMCKeyData, next),
             VMSTATE_UINT32(key_count, AppleSMCState),
+            VMSTATE_UINT32(sram_size, AppleSMCState),
             VMSTATE_VBUFFER_ALLOC_UINT32(sram, AppleSMCState, 0, NULL,
                                          sram_size),
             VMSTATE_END_OF_LIST(),
         },
 };
 
+static void apple_smc_reset_hold(Object *obj, ResetType type)
+{
+    AppleRTKitClass *rtkc;
+    AppleSMCState *s;
+
+    rtkc = APPLE_RTKIT_GET_CLASS(obj);
+    s = APPLE_SMC_IOP(obj);
+
+    if (rtkc->parent_phases.hold != NULL) {
+        rtkc->parent_phases.hold(obj, type);
+    }
+
+    memset(s->sram, 0, s->sram_size);
+}
+
 static void apple_smc_class_init(ObjectClass *klass, void *data)
 {
+    ResettableClass *rc;
     DeviceClass *dc;
+    AppleSMCClass *smcc;
 
+    rc = RESETTABLE_CLASS(klass);
     dc = DEVICE_CLASS(klass);
+    smcc = APPLE_SMC_IOP_CLASS(klass);
 
-    /* device_class_set_legacy_reset(dc, apple_smc_reset); */
-    dc->desc = "Apple SMC IOP";
+    resettable_class_set_parent_phases(rc, NULL, apple_smc_reset_hold, NULL,
+                                       &smcc->parent_phases);
+
+    dc->desc = "Apple System Management Controller IOP";
     dc->vmsd = &vmstate_apple_smc;
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
 }
@@ -692,6 +726,7 @@ static const TypeInfo apple_smc_info = {
     .name = TYPE_APPLE_SMC_IOP,
     .parent = TYPE_APPLE_RTKIT,
     .instance_size = sizeof(AppleSMCState),
+    .class_size = sizeof(AppleSMCClass),
     .class_init = apple_smc_class_init,
 };
 

@@ -45,8 +45,6 @@ typedef struct AppleA9Class {
 
 typedef struct AppleA9State {
     ARMCPU parent_obj;
-    MemoryRegion impl_reg;
-    MemoryRegion coresight_reg;
     MemoryRegion memory;
     MemoryRegion sysmem;
     uint32_t cpu_id;

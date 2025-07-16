@@ -20,17 +20,14 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dtb.h"
 #include "hw/irq.h"
+#include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/baseband.h"
 #include "hw/misc/apple-silicon/smc.h"
 #include "hw/misc/apple-silicon/spmi-baseband.h"
 #include "hw/pci/msi.h"
-#include "hw/pci/pci.h"
 #include "hw/pci/pci_device.h"
 #include "migration/vmstate.h"
-#include "qapi/error.h"
-#include "qemu/bitops.h"
 #include "qemu/log.h"
-#include "qemu/module.h"
 #include "qemu/units.h"
 
 // #define DEBUG_BASEBAND
@@ -367,14 +364,13 @@ static uint8_t smc_key_gP07_read(AppleSMCState *s, SMCKey *key,
         data->data = g_malloc(key->info.size);
     } else {
         uint32_t *data0 = data->data;
-        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__,
-                data->data, data0[0]);
+        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__, data->data,
+                data0[0]);
     }
 
     DPRINTF("%s: key->info.size: 0x%08x ; length: 0x%08x\n", __func__,
             key->info.size, length);
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     default:
@@ -408,8 +404,7 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
     // Do not use data->data here, as it only contains the data last written to
     // by the read function (smc_key_gP09_read)
 
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     // function-bb_on: 0x00800000 write?
@@ -417,8 +412,8 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
     case 0x00800000:
     case 0x00800001: {
         int enable_baseband_power = (value & 1) != 0;
-        DPRINTF("%s: setPowerOnBBPMUPinGated/bb_on enable: %d\n",
-                __func__, enable_baseband_power);
+        DPRINTF("%s: setPowerOnBBPMUPinGated/bb_on enable: %d\n", __func__,
+                enable_baseband_power);
         return kSMCSuccess;
     }
     default:
@@ -444,14 +439,13 @@ static uint8_t smc_key_gP09_read(AppleSMCState *s, SMCKey *key,
         data->data = g_malloc(key->info.size);
     } else {
         uint32_t *data0 = data->data;
-        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__,
-                data->data, data0[0]);
+        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__, data->data,
+                data0[0]);
     }
 
     DPRINTF("%s: key->info.size: 0x%08x ; length: 0x%08x\n", __func__,
             key->info.size, length);
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     // function-pmu_exton: 0x02000000 read?
@@ -500,8 +494,7 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
     // Do not use data->data here, as it only contains the data last written to
     // by the read function (smc_key_gP09_read)
 
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     case 0x04000000: {
@@ -553,14 +546,13 @@ static uint8_t smc_key_gP11_read(AppleSMCState *s, SMCKey *key,
         data->data = g_malloc(key->info.size);
     } else {
         uint32_t *data0 = data->data;
-        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__,
-                data->data, data0[0]);
+        DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__, data->data,
+                data0[0]);
     }
 
     DPRINTF("%s: key->info.size: 0x%08x ; length: 0x%08x\n", __func__,
             key->info.size, length);
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     // gP11 is actually for amfm (wifi/bluetooth-pcie bridge)
@@ -595,8 +587,7 @@ static uint8_t smc_key_gP11_write(AppleSMCState *s, SMCKey *key,
     // Do not use data->data here, as it only contains the data last written to
     // by the read function (smc_key_gP09_read)
 
-    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value,
-            length);
+    DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
     switch (value) {
     // gP11 is actually for amfm (wifi/bluetooth-pcie bridge)
@@ -648,17 +639,17 @@ SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
     AppleSMCState *smc = APPLE_SMC_IOP(object_property_get_link(
         OBJECT(qdev_get_machine()), "smc", &error_fatal));
     apple_smc_create_key_func(smc, 'gP07', 4, SMCKeyTypeUInt32,
-                        SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
-                            SMC_ATTR_READABLE | 0x20,
-                        &smc_key_gP07_read, &smc_key_gP07_write);
+                              SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
+                                  SMC_ATTR_READABLE | 0x20,
+                              &smc_key_gP07_read, &smc_key_gP07_write);
     apple_smc_create_key_func(smc, 'gP09', 4, SMCKeyTypeUInt32,
-                        SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
-                            SMC_ATTR_READABLE | 0x20,
-                        &smc_key_gP09_read, &smc_key_gP09_write);
+                              SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
+                                  SMC_ATTR_READABLE | 0x20,
+                              &smc_key_gP09_read, &smc_key_gP09_write);
     apple_smc_create_key_func(smc, 'gP11', 4, SMCKeyTypeUInt32,
-                        SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
-                            SMC_ATTR_READABLE | 0x20,
-                        &smc_key_gP11_read, &smc_key_gP11_write);
+                              SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
+                                  SMC_ATTR_READABLE | 0x20,
+                              &smc_key_gP11_read, &smc_key_gP11_write);
     // TODO: gP09/gP11 are 0xf0, so gP07 should be as well.
     // TODO: missing, according to t8015, gP01/gp05/gp0e/gp0f/gp12/gp13/gp15
 
@@ -710,15 +701,21 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar0);
     pci_register_bar(dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar1);
 #define BASEBAND_BAR_SUB_ADDR 0x40000000ULL
-    memory_region_init(&s->container, OBJECT(s), "baseband-bar-container", APPLE_BASEBAND_DEVICE_BAR0_SIZE + APPLE_BASEBAND_DEVICE_BAR1_SIZE);
+    memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
+                       APPLE_BASEBAND_DEVICE_BAR0_SIZE +
+                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
     // these aliases are needed, because iOS will mess with the pci subregions
     memory_region_init_alias(&s->bar0_alias, OBJECT(s), "baseband-bar0-alias",
                              &s->bar0, 0x0, APPLE_BASEBAND_DEVICE_BAR0_SIZE);
     memory_region_init_alias(&s->bar1_alias, OBJECT(s), "baseband-bar1-alias",
                              &s->bar1, 0x0, APPLE_BASEBAND_DEVICE_BAR1_SIZE);
     memory_region_add_subregion(&s->container, 0x0000, &s->bar0_alias);
-    memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR0_SIZE, &s->bar1_alias);
-    memory_region_add_subregion(get_system_memory(), APCIE_ROOT_COMMON_ADDRESS + BASEBAND_BAR_SUB_ADDR + 0x0000, &s->container);
+    memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR0_SIZE,
+                                &s->bar1_alias);
+    memory_region_add_subregion(get_system_memory(),
+                                APCIE_ROOT_COMMON_ADDRESS +
+                                    BASEBAND_BAR_SUB_ADDR + 0x0000,
+                                &s->container);
 }
 
 static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
@@ -732,7 +729,7 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     // Don't risk any overlap here. e.g. with AER
     s->hmap_hardcoded_offset = 0x180;
     apple_baseband_add_pcie_cap_hmap(s, dev);
-    //apple_baseband_add_pcie_cap_l1ss(s, dev);
+    // apple_baseband_add_pcie_cap_l1ss(s, dev);
     s->gpio_coredump_val = 0;
     s->gpio_reset_det_val = 0;
     baseband_gpio_set_reset_det(DEVICE(s), 0);
@@ -829,10 +826,7 @@ static const TypeInfo apple_baseband_types[] = {
         .parent = TYPE_PCI_DEVICE,
         .instance_size = sizeof(AppleBasebandDeviceState),
         .class_init = apple_baseband_device_class_init,
-        .interfaces = (InterfaceInfo[]) {
-            { INTERFACE_PCIE_DEVICE },
-            { }
-        },
+        .interfaces = (InterfaceInfo[]){ { INTERFACE_PCIE_DEVICE }, {} },
     },
     {
         .name = TYPE_APPLE_BASEBAND,
