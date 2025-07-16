@@ -2640,7 +2640,7 @@ static void t8030_cpu_reset_work(CPUState *cpu, run_on_cpu_data data)
 static void t8030_cpu_reset(T8030MachineState *t8030_machine)
 {
     CPUState *cpu;
-    AppleA13State *tcpu;
+    AppleA13State *acpu;
     uint64_t m_lo;
     uint64_t m_hi;
 
@@ -2648,8 +2648,8 @@ static void t8030_cpu_reset(T8030MachineState *t8030_machine)
     qemu_guest_getrandom(&m_hi, sizeof(m_hi), NULL);
 
     CPU_FOREACH (cpu) {
-        tcpu = APPLE_A13(cpu);
-        if (tcpu->cpu_id == A13_MAX_CPU + 1) {
+        acpu = APPLE_A13(cpu);
+        if (acpu->cpu_id == A13_MAX_CPU + 1) {
             continue;
         }
 
@@ -2659,11 +2659,11 @@ static void t8030_cpu_reset(T8030MachineState *t8030_machine)
         object_property_set_uint(OBJECT(cpu), "pauth-mlo", m_lo, &error_abort);
         object_property_set_uint(OBJECT(cpu), "pauth-mhi", m_hi, &error_abort);
 
-        if (tcpu->cpu_id == 0) {
+        if (acpu->cpu_id == 0) {
             async_run_on_cpu(cpu, t8030_cpu_reset_work,
                              RUN_ON_CPU_HOST_PTR(t8030_machine));
         } else {
-            apple_a13_cpu_reset(tcpu);
+            apple_a13_cpu_reset(acpu);
         }
     }
 }

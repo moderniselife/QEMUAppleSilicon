@@ -85,8 +85,8 @@ typedef struct AppleA9State {
 
 AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
                               uint32_t phys_id);
-bool apple_a9_cpu_is_sleep(AppleA9State *tcpu);
-bool apple_a9_cpu_is_powered_off(AppleA9State *tcpu);
-void apple_a9_cpu_start(AppleA9State *tcpu);
+bool apple_a9_cpu_is_sleep(AppleA9State *acpu);
+bool apple_a9_cpu_is_powered_off(AppleA9State *acpu);
+void apple_a9_cpu_start(AppleA9State *acpu);
 
 #endif /* HW_ARM_APPLE_SILICON_A9_H */

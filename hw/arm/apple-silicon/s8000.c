@@ -789,8 +789,8 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     PCIBridge *pci = PCI_BRIDGE(object_property_get_link(
         OBJECT(s8000_machine), "pcie.bridge0", &error_fatal));
     PCIBus *sec_bus = pci_bridge_get_sec_bus(pci);
-    apcie_host = APPLE_PCIE_HOST(object_property_get_link(OBJECT(s8000_machine),
-                                 "pcie.host", &error_fatal));
+    apcie_host = APPLE_PCIE_HOST(object_property_get_link(
+        OBJECT(s8000_machine), "pcie.host", &error_fatal));
     nvme = apple_nvme_mmu_create(child, sec_bus);
     g_assert_nonnull(nvme);
     object_property_add_child(OBJECT(s8000_machine), "nvme", OBJECT(nvme));
@@ -1255,19 +1255,19 @@ static void s8000_cpu_reset_work(CPUState *cpu, run_on_cpu_data data)
 static void apple_a9_reset(S8000MachineState *s8000_machine)
 {
     CPUState *cpu;
-    AppleA9State *tcpu;
+    AppleA9State *acpu;
 
     CPU_FOREACH (cpu) {
-        tcpu = APPLE_A9(cpu);
+        acpu = APPLE_A9(cpu);
         object_property_set_int(OBJECT(cpu), "rvbar", S8000_TZ1_BASE,
                                 &error_abort);
-        if (tcpu->cpu_id == 0) {
+        if (acpu->cpu_id == 0) {
             async_run_on_cpu(cpu, s8000_cpu_reset_work,
                              RUN_ON_CPU_HOST_PTR(s8000_machine));
             continue;
         }
         if (ARM_CPU(cpu)->power_state != PSCI_OFF) {
-            arm_reset_cpu(tcpu->mpidr);
+            arm_reset_cpu(acpu->mpidr);
         }
     }
 }

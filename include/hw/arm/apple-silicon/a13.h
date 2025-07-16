@@ -128,10 +128,10 @@ typedef struct AppleA13Cluster {
 AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
                                     uint32_t phys_id, uint32_t cluster_id,
                                     uint8_t cluster_type);
-bool apple_a13_cpu_is_sleep(AppleA13State *tcpu);
-bool apple_a13_cpu_is_powered_off(AppleA13State *tcpu);
-void apple_a13_cpu_start(AppleA13State *tcpu);
-void apple_a13_cpu_reset(AppleA13State *tcpu);
-void apple_a13_cpu_off(AppleA13State *tcpu);
+bool apple_a13_cpu_is_sleep(AppleA13State *acpu);
+bool apple_a13_cpu_is_powered_off(AppleA13State *acpu);
+void apple_a13_cpu_start(AppleA13State *acpu);
+void apple_a13_cpu_reset(AppleA13State *acpu);
+void apple_a13_cpu_off(AppleA13State *acpu);
 
 #endif /* HW_ARM_APPLE_SILICON_A13_H */
