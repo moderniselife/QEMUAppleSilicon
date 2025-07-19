@@ -13,7 +13,7 @@
 #define DPRINTF(fmt, ...) fprintf(stderr, fmt "\n", __VA_ARGS__)
 #else
 #define DPRINTF(fmt, ...) \
-    do {                   \
+    do {                  \
     } while (0);
 #endif
 
@@ -232,7 +232,8 @@ static void apple_gpio_cfg_write(AppleGPIOState *s, unsigned int pin,
                                  hwaddr addr, uint32_t value)
 {
     DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " value 0x" HWADDR_FMT_plx
-            " pin %d/0x%x\n", __func__, addr, value, pin, pin);
+            " pin %d/0x%x\n",
+            __func__, addr, value, pin, pin);
 
     if (pin >= s->pin_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
@@ -273,7 +274,8 @@ static void apple_gpio_int_write(AppleGPIOState *s, unsigned int group,
     unsigned int offset;
 
     DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " value 0x" HWADDR_FMT_plx
-            " group %d/0x%x\n", __func__, addr, value, group, group);
+            " group %d/0x%x\n",
+            __func__, addr, value, group, group);
 
     if (group >= s->irq_group_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",

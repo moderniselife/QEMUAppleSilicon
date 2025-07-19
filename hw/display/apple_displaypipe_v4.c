@@ -75,7 +75,7 @@
  * 8 | M3
  * 9 | ?
  */
- 
+
 #define ADP_V4_GP_COUNT (2)
 
 typedef struct {
