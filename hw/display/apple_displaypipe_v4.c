@@ -48,20 +48,34 @@
  * 0x58000  |  Generic Pixel Pipe 1
  * 0x60000  |  Blend Unit
  * 0x70000  |  White Point Correction
- * 0x7C000  |  Panel Response Correction
+ * 0x7C000  |  Pixel Response Correction
  * 0x80000  |  Dither
  * 0x82000  |  Dither: Enchanced ST Dither 0
  * 0x83000  |  Dither: Enchanced ST Dither 1
  * 0x84000  |  Content-Dependent Frame Duration
  * 0x88000  |  SPLR (Sub-Pixel Layout R?)
  * 0x90000  |  Burn-In Compensation Sampler
- * 0x98000  |  SPUC
- * 0xA0000  |  PDC (Panel D? Correction?)
+ * 0x98000  |  Sub-Pixel Uniformity Correction
+ * 0xA0000  |  PDC (Panel Dither Correction?)
  * 0xB0000  |  PCC (Pixel Color Correction?)
  * 0xD0000  |  PCC Mailbox
  * 0xF0000  |  DBM (Dynamic Backlight Modulation?)
  */
 
+/**
+ * Interrupt Indices
+ * 0 | Maybe VBlank
+ * 1 | APT
+ * 2 | Maybe GP0
+ * 3 | Maybe GP1
+ * 4 | ?
+ * 5 | ?
+ * 6 | ?
+ * 7 | ?
+ * 8 | M3
+ * 9 | ?
+ */
+ 
 #define ADP_V4_GP_COUNT (2)
 
 typedef struct {
