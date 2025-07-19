@@ -10,8 +10,8 @@
 #define REG_AXI_START_HI (0x20)
 #define REG_AXI_END_LO (0x28)
 #define REG_AXI_END_HI (0x30)
-#define REG_AXI_CTRL (0x38)
-#define AXI_CTRL_RUN BIT(0)
+#define REG_REMAP_0 (0x38)
+#define REG_REMAP_1 (0x3C)
 #define REG_CPU_CTRL (0x44)
 #define REG_CPU_STATUS (0x48)
 #define REG_KIC_GLB_CFG (0x80C)
@@ -33,6 +33,7 @@
     (KIC_TMR_CFG_FSL_SW | KIC_TMR_CFG_SMD_FIQ | KIC_TMR_CFG_IMD_FIQ | \
      KIC_TMR_CFG_EN)
 #define REG_KIC_TMR_CFG2 (0xC004)
+#define REG_KIC_TMR_ISR (0xC018)
 #define REG_KIC_TMR_STATE_SET1 (0xC020)
 #define KIC_TMR_STATE_SET_SGT (1 << 0)
 #define REG_KIC_TMR_STATE_SET2 (0xC024)
