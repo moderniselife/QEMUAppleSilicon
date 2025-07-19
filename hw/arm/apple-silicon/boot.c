@@ -155,6 +155,9 @@ static const char *REM_NAMES[] = {
     "dart-scaler\0$",  "dockchannel-uart\0$",
     "dotara\0$",       "pmp\0$",
     "stockholm\0$",    "stockholm-spmi\0$",
+    "bluetooth\0$",    "bluetooth-pcie\0$",
+    "wlan\0$",         "smc-ext-charger\0$",
+    "smc-charger\0$",
 #ifndef ENABLE_BASEBAND
     "baseband\0$",     "baseband-spmi\0$",
     "baseband-vol\0$",
@@ -165,30 +168,16 @@ static const char *REM_NAMES[] = {
     "isp\0$",          "xART\0$",
     "Lynx\0$",
 #endif
-#if 1
-    "bluetooth\0$",
-    "bluetooth-pcie\0$",
-    "wlan\0$",
-#endif
-#if 1
-    "smc-ext-charger\0$",
-    "smc-charger\0$",
-#endif
 };
 
 static const char *REM_DEV_TYPES[] = {
-    "bluetooth\0$",     "wlan\0$",          "pmp\0$",
+    "bluetooth\0$",     "wlan\0$",
+    "pmp\0$",
 #ifndef ENABLE_BASEBAND
     "baseband\0$",      "baseband-spmi\0$",
 #endif
-    "spherecontrol\0$",
-#if 0
-    "aop\0$",
-#endif
-#if 1
-    "smc-ext-charger\0$",
+    "spherecontrol\0$", "smc-ext-charger\0$",
     "smc-charger\0$",
-#endif
 };
 
 static const char *REM_PROPS[] = {
@@ -226,20 +215,8 @@ static const char *REM_PROPS[] = {
     "pearl-camera",
     "face-detection-support",
     "siri-gesture",
-#ifdef ENABLE_BASEBAND
-    //"function-pmu_exton_config", // smc-pmu
-    //"function-bb_on", // smc-pmu
-    //"function-pmu_exton", // smc-pmu
-    //---
-    //"function-coredump", // gpio
-    //"function-pcie_port_control", // apcie ; TODO manual-enable/function-pcie_port_control
-    //"function-sac", // sacm
-    //"function-reset_det", // gpio
-#endif
-#if 1
-    "pci-l1pm-control",
+    "pci-l1pm-control", // TODO?
     "pci-aspm-default",
-#endif
 };
 
 static void *srawmemchr(void *str, int chr)
@@ -548,7 +525,7 @@ void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
 
     child = dtb_get_node(root, "defaults");
     g_assert_nonnull(child);
-//#ifndef ENABLE_DATA_ENCRYPTION
+// #ifndef ENABLE_DATA_ENCRYPTION
 #if 0
     dtb_set_prop_null(child, "no-effaceable-storage");
 #endif
