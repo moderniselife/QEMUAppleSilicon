@@ -312,7 +312,7 @@ sepos_return_module_thread_string_t8015(uint64_t module_thread_id)
 }
 
 static const char *
-sepos_return_module_thread_string_t8020(uint64_t module_thread_id)
+sepos_return_module_thread_string_t8020_t8030(uint64_t module_thread_id)
 {
     // base == sepdump02_SEPOS?
     // T8020 thread name/info base 0xffffffe00001b1c8
@@ -419,7 +419,7 @@ static const char *sepos_return_module_thread_string(uint32_t chip_id,
     if (chip_id == 0x8015) {
         return sepos_return_module_thread_string_t8015(module_thread_id);
     } else {
-        return sepos_return_module_thread_string_t8020(module_thread_id);
+        return sepos_return_module_thread_string_t8020_t8030(module_thread_id);
     }
 }
 
@@ -2912,7 +2912,8 @@ void enable_trace_buffer(AppleSEPState *s)
     if (s->chip_id >= 0x8020) {
 #ifdef SEP_USE_IOS14_OVERRIDE
         // bypass_offset = 0x11bb0; // T8020 iOS14
-        bypass_offset = 0x11b34; // T8030 iOS14
+        // bypass_offset = 0x11b34; // T8030 iOS14.7.1
+        bypass_offset = 0x11c38; // T8030 iOS14beta5
 #else
         bypass_offset = 0x12fb4; // T8020 iOS15
 #endif
