@@ -2831,7 +2831,8 @@ void enable_trace_buffer(AppleSEPState *s)
 #define SEPOS_PHYS_BASE_T8015 (0x3404A4000ull)
 #define SEPOS_PHYS_BASE_T8020_IOS14 (0x340600000ull)
 #define SEPOS_PHYS_BASE_T8020_IOS15 (0x340710000ull)
-#define SEPOS_PHYS_BASE_T8030_IOS14 (0x340634000ull)
+//#define SEPOS_PHYS_BASE_T8030_IOS14 (0x340634000ull) // for 14.7.1
+#define SEPOS_PHYS_BASE_T8030_IOS14 (0x340628000ull) // for 14beta5
 // for T8020/T8030 SEPFW of early 14 and 14.7.1
 #define SEPOS_OBJECT_MAPPING_BASE_VERSION_IOS14 (0x198D0)
 #define SEPOS_OBJECT_MAPPING_BASE_VERSION_IOS15 (0x1D748)
@@ -3005,7 +3006,8 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
             } else if (s->chip_id >= 0x8020) {
 #ifdef SEP_USE_IOS14_OVERRIDE
                 // phys_addr = 0x340736380ull; // T8020 iOS 14
-                phys_addr = 0x3407ca380ull; // T8030 iOS 14
+                //phys_addr = 0x3407ca380ull; // T8030 iOS 14.7.1
+                phys_addr = 0x34076e380ull; // T8030 iOS 14beta5
 #else
                 phys_addr = 0x34086e380ull; // T8020 iOS 15
 #endif
