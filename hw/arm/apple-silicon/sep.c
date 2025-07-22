@@ -312,14 +312,14 @@ sepos_return_module_thread_string_t8015(uint64_t module_thread_id)
 }
 
 static const char *
-sepos_return_module_thread_string_t8020_t8030(uint64_t module_thread_id)
+sepos_return_module_thread_string_t8030(uint64_t module_thread_id)
 {
     // base == sepdump02_SEPOS?
-    // T8020 thread name/info base 0xffffffe00001b1c8
+    // T8020/T8030 thread name/info base 0xffffffe00001b1c8
 
     switch (module_thread_id) {
     case 0x0:
-        return "SEPOS";
+        return "BOOT"; // SEPOS
     case 0x10000:
         return "SEPD";
     case 0x10001:
@@ -339,10 +339,12 @@ sepos_return_module_thread_string_t8020_t8030(uint64_t module_thread_id)
     case 0x10008:
         return "MONI";
     case 0x10009:
-        return "EISP";
+        return "AESH";
     case 0x1000a:
-        return "shnd";
+        return "EISP";
     case 0x1000b:
+        return "shnd";
+    case 0x1000c:
         return "ep0";
     case 0x20000:
         return "DAES";
@@ -383,31 +385,33 @@ sepos_return_module_thread_string_t8020_t8030(uint64_t module_thread_id)
     case 0x90003:
         return "FDCN";
     case 0x90004:
-        return "FIPP";
+        return "SDCN";
     case 0x90005:
-        return "FPCE";
+        return "FIPP";
     case 0x90006:
-        return "FPPD";
+        return "FPCE";
     case 0x90007:
-        return "FDMA";
+        return "FPPD";
     case 0x90008:
-        return "SHAV";
+        return "FDMA";
     case 0x90009:
+        return "SHAV";
+    case 0x9000a:
         return "PROX";
     case 0xa0000:
         return "scrd";
     case 0xb0000:
-        return "pass"; // 13
+        return "pass";
     case 0xc0000:
-        return "sks"; // 14
+        return "sks";
     case 0xc0001:
-        return "sksa"; // 14
+        return "sksa";
     case 0xd0000:
-        return "sprl";
+        return "hdcp";
     case 0xe0000:
-        return "sse"; // 16
+        return "sprl";
     case 0xf0000:
-        return "hilo";
+        return "sse";
     default:
         return "Unknown";
     }
@@ -418,9 +422,11 @@ static const char *sepos_return_module_thread_string(uint32_t chip_id,
 {
     if (chip_id == 0x8015) {
         return sepos_return_module_thread_string_t8015(module_thread_id);
-    } else {
-        return sepos_return_module_thread_string_t8020_t8030(module_thread_id);
+    } else if (chip_id == 0x8030) {
+        return sepos_return_module_thread_string_t8030(module_thread_id);
     }
+    g_assert_not_reached();
+    return "";
 }
 
 static void debug_trace_reg_write(void *opaque, hwaddr addr, uint64_t data,
