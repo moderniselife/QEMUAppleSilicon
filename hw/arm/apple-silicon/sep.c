@@ -2825,7 +2825,8 @@ void enable_trace_buffer(AppleSEPState *s)
 // (0x340611BA8-0x11BA8)
 // get this with gdb, prerequisite is disabling aslr(?):
 // b *0x<sepos_module_start_function> ; gva2gpa 0x<sepos_module_start_function>
-// the result minus <sepos_module_start_function>
+// the result minus <sepos_module_start_function from binja without rebasing>
+// &~0x100000000
 // maybe it's not that easy to disable the SEPOS module ASLR under iOS 15:
 // so instead make breakpoints for the second (or both) eret and do "si".
 #define SEPOS_PHYS_BASE_T8015 (0x3404A4000ull)
@@ -2833,6 +2834,7 @@ void enable_trace_buffer(AppleSEPState *s)
 #define SEPOS_PHYS_BASE_T8020_IOS15 (0x340710000ull)
 //#define SEPOS_PHYS_BASE_T8030_IOS14 (0x340634000ull) // for 14.7.1
 #define SEPOS_PHYS_BASE_T8030_IOS14 (0x340628000ull) // for 14beta5
+#define SEPOS_PHYS_BASE_T8030_IOS15 (0x34075c000ull)
 // for T8020/T8030 SEPFW of early 14 and 14.7.1
 #define SEPOS_OBJECT_MAPPING_BASE_VERSION_IOS14 (0x198D0)
 #define SEPOS_OBJECT_MAPPING_BASE_VERSION_IOS15 (0x1D748)
@@ -2856,13 +2858,20 @@ void enable_trace_buffer(AppleSEPState *s)
 #endif
     if (s->chip_id == 0x8015) {
         sepos_phys_base = SEPOS_PHYS_BASE_T8015;
-    } else if (s->chip_id >= 0x8020) {
+    } else if (s->chip_id == 0x8020) {
 #ifdef SEP_USE_IOS14_OVERRIDE
-        // sepos_phys_base = SEPOS_PHYS_BASE_T8020_IOS14;
-        sepos_phys_base = SEPOS_PHYS_BASE_T8030_IOS14;
+        sepos_phys_base = SEPOS_PHYS_BASE_T8020_IOS14;
 #else
         sepos_phys_base = SEPOS_PHYS_BASE_T8020_IOS15;
 #endif
+    } else if (s->chip_id == 0x8030) {
+#ifdef SEP_USE_IOS14_OVERRIDE
+        sepos_phys_base = SEPOS_PHYS_BASE_T8030_IOS14;
+#else
+        sepos_phys_base = SEPOS_PHYS_BASE_T8030_IOS15;
+#endif
+    } else {
+        g_assert_not_reached();
     }
 #ifdef SEP_USE_IOS14_OVERRIDE
     object_mapping_TRAC.name = 'TRAC';
@@ -2909,13 +2918,18 @@ void enable_trace_buffer(AppleSEPState *s)
     // functions, more restrictive.
     uint32_t value32_nop = 0xd503201f; // nop
     uint64_t bypass_offset = 0;
-    if (s->chip_id >= 0x8020) {
+    if (s->chip_id == 0x8020) {
 #ifdef SEP_USE_IOS14_OVERRIDE
-        // bypass_offset = 0x11bb0; // T8020 iOS14
-        // bypass_offset = 0x11b34; // T8030 iOS14.7.1
-        bypass_offset = 0x11c38; // T8030 iOS14beta5
+        bypass_offset = 0x11bb0; // T8020 iOS14
 #else
         bypass_offset = 0x12fb4; // T8020 iOS15
+#endif
+    } else if (s->chip_id == 0x8030) {
+#ifdef SEP_USE_IOS14_OVERRIDE
+        //bypass_offset = 0x11b34; // T8030 iOS14.7.1
+        bypass_offset = 0x11c38; // T8030 iOS14beta5
+#else
+        bypass_offset = 0x12e9c; // T8030 iOS15
 #endif
     } else if (s->chip_id == 0x8015) {
         // T8015's SEPFW SEPOS is not reachable from SEPROM, it's LZVN
@@ -2988,13 +3002,14 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
         if ((data == 0xFC4A2CAC || data == 0xeee6ba79) &&
             (s->chip_id >= 0x8020)) // Enable Trace Buffer
         {
-            // Only works for T8020, because the T8015 SEPOS is compressed.
+            // Only works for >= T8020, because the T8015 SEPOS is compressed.
 #ifdef SEP_ENABLE_TRACE_BUFFER
             enable_trace_buffer(s);
 #endif
         }
         break;
     case 0x8:
+#ifdef SEP_DISABLE_ASLR
         if (data == 0x23BFDFE7) {
             hwaddr phys_addr = 0x0;
             // easy way of retrieving the sepb random_0 address
@@ -3004,16 +3019,21 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
             // and then do p/x $x0+0x80 == e.g. 0x3407ca380
             if (s->chip_id == 0x8015) {
                 phys_addr = 0x34015FD40ull; // T8015
-            } else if (s->chip_id >= 0x8020) {
+            } else if (s->chip_id == 0x8020) {
 #ifdef SEP_USE_IOS14_OVERRIDE
-                // phys_addr = 0x340736380ull; // T8020 iOS 14
-                //phys_addr = 0x3407ca380ull; // T8030 iOS 14.7.1
-                phys_addr = 0x34076e380ull; // T8030 iOS 14beta5
+                phys_addr = 0x340736380ull; // T8020 iOS 14
 #else
                 phys_addr = 0x34086e380ull; // T8020 iOS 15
 #endif
+            } else if (s->chip_id == 0x8030) {
+#ifdef SEP_USE_IOS14_OVERRIDE
+                //phys_addr = 0x3407ca380ull; // T8030 iOS 14.7.1
+                phys_addr = 0x34076e380ull; // T8030 iOS 14beta5
+#else
+                phys_addr = 0x34090a380ull; // T8030 iOS 15
+#endif
             } else {
-                // g_assert_not_reached();
+                g_assert_not_reached();
             }
             if (phys_addr) {
                 AddressSpace *nsas = &address_space_memory;
@@ -3023,13 +3043,12 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
                 // ASLR for SEPOS apps
                 // Future iOS versions might use more than 16 bytes, so zero
                 // the whole field here.
-#ifdef SEP_DISABLE_ASLR
                 address_space_set(nsas, phys_addr, 0, 0x40,
                                   MEMTXATTRS_UNSPECIFIED); // phys_SEPB + 0x80;
                                                            // pc==0x240005BAC
-#endif
             }
         }
+#endif
         if (data == 0x41a7 && (s->chip_id >= 0x8015)) {
             DPRINTF("%s: SEPFW_copy_test0: 0x" HWADDR_FMT_plx " 0x%" PRIx64
                     "\n",
@@ -3296,6 +3315,8 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
     s->chip_id = chip_id;
 
     if (s->chip_id >= 0x8020) {
+        if (s->chip_id == 0x8020)
+            g_assert_not_reached();
         s->shmbuf_base = SEP_SHMBUF_BASE;
         s->trace_buffer_base_offset = 0x10000;
         s->debug_trace_size = 0x10000;
