@@ -426,7 +426,6 @@ static const char *sepos_return_module_thread_string(uint32_t chip_id,
         return sepos_return_module_thread_string_t8030(module_thread_id);
     }
     g_assert_not_reached();
-    return "";
 }
 
 static void debug_trace_reg_write(void *opaque, hwaddr addr, uint64_t data,
@@ -1742,10 +1741,8 @@ static QCryptoCipherAlgo get_aes_cipher_alg(int flags)
     case SEP_AESS_CMD_FLAG_KEYSIZE_AES256:
         return QCRYPTO_CIPHER_ALGO_AES_256;
     default:
-        break;
+        g_assert_not_reached();
     }
-    g_assert_not_reached();
-    return 0;
 }
 
 static void xor_32bit_value(uint8_t *dest, uint32_t val, int size)
@@ -1859,7 +1856,6 @@ static int aess_get_custom_keywrap_index(uint32_t cmd)
         return 3;
     default:
         g_assert_not_reached();
-        // return -1;
     }
 }
 
@@ -2838,7 +2834,7 @@ void enable_trace_buffer(AppleSEPState *s)
 #define SEPOS_PHYS_BASE_T8015 (0x3404A4000ull)
 #define SEPOS_PHYS_BASE_T8020_IOS14 (0x340600000ull)
 #define SEPOS_PHYS_BASE_T8020_IOS15 (0x340710000ull)
-//#define SEPOS_PHYS_BASE_T8030_IOS14 (0x340634000ull) // for 14.7.1
+// #define SEPOS_PHYS_BASE_T8030_IOS14 (0x340634000ull) // for 14.7.1
 #define SEPOS_PHYS_BASE_T8030_IOS14 (0x340628000ull) // for 14beta5
 #define SEPOS_PHYS_BASE_T8030_IOS15 (0x34075c000ull)
 // for T8020/T8030 SEPFW of early 14 and 14.7.1
@@ -2932,7 +2928,7 @@ void enable_trace_buffer(AppleSEPState *s)
 #endif
     } else if (s->chip_id == 0x8030) {
 #ifdef SEP_USE_IOS14_OVERRIDE
-        //bypass_offset = 0x11b34; // T8030 iOS14.7.1
+        // bypass_offset = 0x11b34; // T8030 iOS14.7.1
         bypass_offset = 0x11c38; // T8030 iOS14beta5
 #else
         bypass_offset = 0x12e9c; // T8030 iOS15
@@ -3033,7 +3029,7 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #endif
             } else if (s->chip_id == 0x8030) {
 #ifdef SEP_USE_IOS14_OVERRIDE
-                //phys_addr = 0x3407ca380ull; // T8030 iOS 14.7.1
+                // phys_addr = 0x3407ca380ull; // T8030 iOS 14.7.1
                 phys_addr = 0x34076e380ull; // T8030 iOS 14beta5
 #else
                 phys_addr = 0x34090a380ull; // T8030 iOS 15
@@ -3321,20 +3317,18 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
     s->chip_id = chip_id;
 
     if (s->chip_id >= 0x8020) {
-        if (s->chip_id == 0x8020)
+        if (s->chip_id == 0x8020) {
             g_assert_not_reached();
+        }
         s->shmbuf_base = SEP_SHMBUF_BASE;
         s->trace_buffer_base_offset = 0x10000;
         s->debug_trace_size = 0x10000;
-    } else if (s->chip_id == 0x8015) {
-        g_assert_not_reached();
+    } /* else if (s->chip_id == 0x8015) {
         s->shmbuf_base = 0; // is dynamic
         s->trace_buffer_base_offset = 0x10000;
         s->debug_trace_size = 0x10000;
-    } else {
-        s->shmbuf_base = 0;
-        s->trace_buffer_base_offset = 0;
-        s->debug_trace_size = 0;
+    } */ else {
+        g_assert_not_reached();
     }
 
     MemoryRegion *mr0 = g_new0(MemoryRegion, 1);
