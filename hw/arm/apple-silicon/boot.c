@@ -75,7 +75,7 @@ static const char *KEEP_COMP[] = {
     "audio-control,cs42l77\0$",
     "aes,s8000\0$",
     "aic,1\0$",
-    "apcie-bridge\0$"
+    "apcie-bridge\0$",
     "apple,lightning\0ARM,v8\0$",
     "apple,thunder\0ARM,v8\0$",
     "apple,twister\0ARM,v8\0$",
