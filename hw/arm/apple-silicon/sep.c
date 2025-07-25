@@ -3327,7 +3327,8 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
         s->shmbuf_base = 0; // is dynamic
         s->trace_buffer_base_offset = 0x10000;
         s->debug_trace_size = 0x10000;
-    } */ else {
+    } */
+    else {
         g_assert_not_reached();
     }
 
