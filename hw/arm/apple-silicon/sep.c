@@ -22,6 +22,7 @@
 #include "crypto/cipher.h"
 #include "crypto/random.h"
 #include "exec/address-spaces.h"
+#include "exec/tb-flush.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/a9.h"
 #include "hw/arm/apple-silicon/sep.h"
@@ -3235,6 +3236,7 @@ static void apple_sep_cpu_moni_jump(CPUState *cpu, run_on_cpu_data data)
     DPRINTF("%s: before cpu_set_pc: base=0x" HWADDR_FMT_plx "\n", __func__,
             load_addr);
     cpu_set_pc(cpu, load_addr);
+    tb_flush(cpu); // possible workaround for intermittent sep boot errors
 }
 
 static void apple_sep_iop_start(AppleA7IOP *s)
