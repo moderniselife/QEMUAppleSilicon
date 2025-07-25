@@ -3881,8 +3881,7 @@ static int output_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
     HEXDUMP("output_ec_pub: pub_x", &pub_xy[0x00], BYTELEN_384);
     HEXDUMP("output_ec_pub: pub_y", &pub_xy[0x00 + BYTELEN_384], BYTELEN_384);
 
-    mpz_clear(temp1);
-    mpz_clear(temp2);
+    mpz_clears(temp1, temp2, NULL);
 
     return 0;
 }
@@ -3902,8 +3901,7 @@ static int input_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
     ecc_point_init(ecc_pub, ecc);
     ret = ecc_point_set(ecc_pub, temp1, temp2);
 
-    mpz_clear(temp1);
-    mpz_clear(temp2);
+    mpz_clears(temp1, temp2, NULL);
 
     return ret;
 }
