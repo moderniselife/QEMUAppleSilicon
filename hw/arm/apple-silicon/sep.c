@@ -3855,8 +3855,7 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
     ecc_point_init(ecc_pub, ecc);
     ecc_scalar_init(ecc_key, ecc);
 
-    mpz_init(temp1);
-    mpz_set_str(temp1, priv, 16);
+    mpz_init_set_str(temp1, priv, 16);
     mpz_add_ui(temp1, temp1, 1);
     g_assert_cmpuint(ecc_scalar_set(ecc_key, temp1), !=, 0);
     mpz_clear(temp1);
@@ -3874,6 +3873,8 @@ static int output_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
     // const struct ecc_curve *ecc = nettle_get_secp_384r1();
     mpz_t temp1, temp2;
 
+    mpz_init(temp1);
+    mpz_init(temp2);
     ecc_point_get(ecc_pub, temp1, temp2);
     mpz_export(&pub_xy[0x00], NULL, 1, 1, 1, 0, temp1);
     mpz_export(&pub_xy[0x00 + BYTELEN_384], NULL, 1, 1, 1, 0, temp2);
@@ -3894,6 +3895,8 @@ static int input_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
 
     HEXDUMP("input_ec_pub: pub_x", &pub_xy[0x00], BYTELEN_384);
     HEXDUMP("input_ec_pub: pub_y", &pub_xy[0x00 + BYTELEN_384], BYTELEN_384);
+    mpz_init(temp1);
+    mpz_init(temp2);
     mpz_import(temp1, SECP384_PUBLIC_SIZE, 1, 1, 1, 0, &pub_xy[0x00]);
     mpz_import(temp2, SECP384_PUBLIC_SIZE, 1, 1, 1, 0,
                &pub_xy[0x00 + BYTELEN_384]);
