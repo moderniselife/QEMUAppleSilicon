@@ -36,6 +36,7 @@
 #include "hw/qdev-properties-system.h"
 #include "qapi/error.h"
 #include "qemu/cutils.h"
+#include "qemu/guest-random.h"
 #include "qemu/log.h"
 #include "qemu/units.h"
 #include "nettle/ccm.h"
@@ -939,7 +940,7 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
     case REG_TRNG_STATUS:
         enabled = (s->config & TRNG_CONTROL_ENABLED) != 0;
         if ((data & TRNG_STATUS_READY) != 0 && (s->offset_0x70 & 0xC0) == 0) {
-            qcrypto_random_bytes(s->fifo, sizeof(s->fifo), NULL);
+            qemu_guest_getrandom_nofail(s->fifo, sizeof(s->fifo));
         }
         break;
     case REG_TRNG_CONTROL: {
@@ -1955,8 +1956,8 @@ static void aess_handle_cmd(AppleAESSState *s)
         // aess_keywrap_uid(s, key_wrap_data_in, key_wrap_data_out, cipher_alg,
         // true);
         aess_keywrap_uid(s, key_wrap_data_in, key_wrap_data_out, cipher_alg);
-        // qcrypto_random_bytes(key_wrap_data_out, sizeof(key_wrap_data_out),
-        // NULL); // For testing if random output breaks stuff.
+        // qemu_guest_getrandom_nofail(key_wrap_data_out, sizeof(
+        // key_wrap_data_out)); // For testing if random output breaks stuff.
         memcpy(s->out_full, key_wrap_data_out, key_len);
 #endif
     }
@@ -3846,11 +3847,22 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
 {
     const struct ecc_curve *ecc = nettle_get_secp_384r1();
     mpz_t temp1;
+    uint8_t rand_bytes[BYTELEN_384] = {0};
 
     ecc_point_init(ecc_pub, ecc);
     ecc_scalar_init(ecc_key, ecc);
 
-    mpz_init_set_str(temp1, priv, 16);
+    if (priv == NULL) {
+        qemu_guest_getrandom_nofail(rand_bytes, sizeof(rand_bytes));
+        mpz_import(temp1, sizeof(rand_bytes), 1, 1, 1, 0, rand_bytes);
+        // mpz_export to read it back, just to make sure
+#ifdef SEP_DEBUG
+        mpz_export(&rand_bytes, NULL, 1, 1, 1, 0, temp1);
+#endif
+        HEXDUMP("generate_ec_priv: rand_bytes", &rand_bytes, sizeof(rand_bytes));
+    } else {
+        mpz_init_set_str(temp1, priv, 16);
+    }
     mpz_add_ui(temp1, temp1, 1);
 
     if (ecc_scalar_set(ecc_key, temp1) == 0) {
@@ -3890,8 +3902,8 @@ static int input_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
     HEXDUMP("input_ec_pub: pub_x", &pub_xy[0x00], BYTELEN_384);
     HEXDUMP("input_ec_pub: pub_y", &pub_xy[0x00 + BYTELEN_384], BYTELEN_384);
     mpz_inits(temp1, temp2, NULL);
-    mpz_import(temp1, SECP384_PUBLIC_SIZE, 1, 1, 1, 0, &pub_xy[0x00]);
-    mpz_import(temp2, SECP384_PUBLIC_SIZE, 1, 1, 1, 0,
+    mpz_import(temp1, BYTELEN_384, 1, 1, 1, 0, &pub_xy[0x00]);
+    mpz_import(temp2, BYTELEN_384, 1, 1, 1, 0,
                &pub_xy[0x00 + BYTELEN_384]);
     ecc_point_init(ecc_pub, ecc);
     ret = ecc_point_set(ecc_pub, temp1, temp2);
@@ -3926,7 +3938,7 @@ static int generate_kbkdf_keys(struct AppleSSCState *ssc_state,
     struct hmac_sha256_ctx ctx;
     hmac_sha256_set_key(&ctx, SHA256_DIGEST_SIZE, hmac_key);
     // only the first half is the shared_key
-    hmac_sha256_update(&ctx, SECP384_PUBLIC_SIZE, shared_key_xy);
+    hmac_sha256_update(&ctx, BYTELEN_384, shared_key_xy);
     hmac_sha256_digest(&ctx, SHA256_DIGEST_SIZE, derived_key);
     HEXDUMP("generate_kbkdf_keys: derived_key", derived_key,
             SHA256_DIGEST_SIZE);
@@ -4004,8 +4016,8 @@ static void clear_ecc_scalar(struct ecc_scalar *ecc_key)
 // TODO: Properly handle various error cases with cmd 0x0/0x1/..., like wrong
 // hashes/signatures/parameters or public keys not being on the curve.
 
-static int answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
-                                uint8_t *request, uint8_t *response)
+static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
+                                 uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     struct ecc_point cmd0_ecpub, ecc_pub;
@@ -4013,7 +4025,6 @@ static int answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
     struct dsa_signature signature;
     uint8_t digest[BYTELEN_384] = { 0 };
     uint8_t kbkdf_index = 0; // hardcoded
-    char priv_str[0x60 + 1] = { 0 };
     struct sha384_ctx ctx;
 
     knuth_lfib_init(&rctx, 4711);
@@ -4024,35 +4035,25 @@ static int answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
                       __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     if (input_ec_pub(&cmd0_ecpub,
                      &request[MSG_PREFIX_LENGTH + SHA256_DIGEST_SIZE]) ==
         0) { // curve is invalid
         qemu_log_mask(LOG_GUEST_ERROR, "%s: invalid curve\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
-        goto jump_ret;
+        goto jump_ret1;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
-    snprintf(
-        priv_str, sizeof(priv_str),
-        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        "dddddddddddddddddddddddddddd%02x",
-        kbkdf_index);
-    // TODO: use priv_str = NULL here after the function has been reworked
-    // TODO: ASAN might show a (spurious?) __gmp_default_allocate leak here.
-    // already fixed?
-    if (generate_ec_priv(priv_str, &ssc_state->ecc_keys[kbkdf_index],
+    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index],
                          &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
-        ecc_point_clear(&ecc_pub);
-        goto jump_ret;
+        goto jump_ret0;
     }
     output_ec_pub(&ecc_pub,
                   &response[MSG_PREFIX_LENGTH + SECP384_PUBLIC_XY_SIZE]);
-    ecc_point_clear(&ecc_pub);
     memcpy(ssc_state->random_hmac_key, &request[MSG_PREFIX_LENGTH],
            SHA256_DIGEST_SIZE);
     DPRINTF("INFOSTR_AKE_SESSIONSEED: %s\n", INFOSTR_AKE_SESSIONSEED);
@@ -4079,22 +4080,22 @@ static int answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
                &signature);
     mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + 0x00], NULL, 1, 1, 1, 0,
                signature.r);
-    mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + SECP384_PUBLIC_SIZE], NULL,
+    mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + BYTELEN_384], NULL,
                1, 1, 1, 0, signature.s);
     dsa_signature_clear(&signature);
-jump_ret:
+jump_ret0:
+    ecc_point_clear(&ecc_pub);
+jump_ret1:
     ecc_point_clear(&cmd0_ecpub);
-    return 0;
 }
 
-static int answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
-                                     uint8_t *request, uint8_t *response)
+static void answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
+                                      uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x01_req", request, SSC_REQUEST_SIZE_CMD_0x1);
     struct ecc_point cmd1_ecpub, ecc_pub;
     uint8_t kbkdf_index = request[1];
-    char priv_str[0x60 + 1] = { 0 };
 
     uint8_t *cmac_req_should = &request[MSG_PREFIX_LENGTH];
     uint8_t *sw_public_xy2 = &request[MSG_PREFIX_LENGTH + AES_BLOCK_SIZE];
@@ -4109,27 +4110,26 @@ static int answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
         DPRINTF("%s: kbkdf_index over limit: %u\n", __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID);
-        return 0;
+        return;
     }
     if (is_keyslot_valid(ssc_state, kbkdf_index)) { // shouldn't already exist
         DPRINTF("%s: invalid kbkdf_index: %u\n", __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     if (input_ec_pub(&cmd1_ecpub, sw_public_xy2) == 0) { // curve is invalid
         DPRINTF("%s: invalid curve\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
         goto jump_ret1;
     }
-    snprintf(
-        priv_str, sizeof(priv_str),
-        "999999999999999999999999999999999999999999999999999999999999999999"
-        "9999999999999999999999999999%02x",
-        kbkdf_index);
-    // TODO: use priv_str = NULL here after the function has been reworked
-    int err =
-        generate_ec_priv(priv_str, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub);
+    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index],
+                         &ecc_pub) != 0) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
+                      __func__);
+        do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
+        goto jump_ret0;
+    }
     uint8_t aes_key_mackey_req[0x20] = { 0 };
     uint8_t aes_key_extractorkey_req[0x20] = { 0 };
     aes_keys_from_sp_key(ssc_state, kbkdf_index, request, aes_key_mackey_req,
@@ -4164,11 +4164,10 @@ jump_ret0:
     ecc_point_clear(&ecc_pub);
 jump_ret1:
     ecc_point_clear(&cmd1_ecpub);
-    return 0;
 }
 
-static int answer_cmd_0x2_disconnect_sp(struct AppleSSCState *ssc_state,
-                                        uint8_t *request, uint8_t *response)
+static void answer_cmd_0x2_disconnect_sp(struct AppleSSCState *ssc_state,
+                                         uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x02_req", request, SSC_REQUEST_SIZE_CMD_0x2);
@@ -4177,7 +4176,7 @@ static int answer_cmd_0x2_disconnect_sp(struct AppleSSCState *ssc_state,
         DPRINTF("%s: invalid kbkdf_index: %u\n", __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     clear_ecc_scalar(&ssc_state->ecc_keys[kbkdf_index]);
@@ -4185,11 +4184,10 @@ static int answer_cmd_0x2_disconnect_sp(struct AppleSSCState *ssc_state,
            sizeof(ssc_state->kbkdf_keys[kbkdf_index]));
     ssc_state->kbkdf_counter[kbkdf_index] = 0;
     DPRINTF("answer_cmd_0x2_disconnect_sp: kbkdf_index: %u\n", kbkdf_index);
-    return 0;
 }
 
-static int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
-                                         uint8_t *request, uint8_t *response)
+static void answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
+                                          uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x03_req", request, SSC_REQUEST_SIZE_CMD_0x3);
@@ -4204,14 +4202,14 @@ static int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
         DPRINTF("%s: invalid copy: %u\n", __func__, copy);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index_key >= KBKDF_KEY_MAX_SLOTS ||
         !is_keyslot_valid(ssc_state, kbkdf_index_key)) {
         DPRINTF("%s: invalid kbkdf_index_key: %u\n", __func__, kbkdf_index_key);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index_dataslot == 0 ||
         kbkdf_index_dataslot >= KBKDF_KEY_MAX_SLOTS) {
@@ -4219,7 +4217,7 @@ static int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
                 kbkdf_index_dataslot);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     int blk_offset = (kbkdf_index_dataslot * CMD_METADATA_DATA_PAYLOAD_LENGTH *
                       SSC_REQUEST_MAX_COPIES) +
@@ -4239,7 +4237,7 @@ static int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
     if (err0 == 0) {
         DPRINTF("%s: invalid CMAC\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CMAC_INVALID);
-        return 0;
+        return;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     HEXDUMP("cmd_0x03_req: req_dec_out", req_dec_out,
@@ -4265,13 +4263,11 @@ static int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state,
         aes_ccm_crypt(ssc_state, kbkdf_index_key, &response[0x00], 0x0,
                       resp_nop_out, &response[MSG_PREFIX_LENGTH], true, true);
     HEXDUMP("cmd_0x03_resp", response, SSC_RESPONSE_SIZE_CMD_0x3);
-
-    return 0;
 }
 
-static int answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state,
-                                             uint8_t *request,
-                                             uint8_t *response)
+static void answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state,
+                                              uint8_t *request,
+                                              uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x04_req", request, SSC_REQUEST_SIZE_CMD_0x4);
@@ -4283,14 +4279,14 @@ static int answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state,
         DPRINTF("%s: invalid copy: %u\n", __func__, copy);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index == 0 || kbkdf_index >= KBKDF_KEY_MAX_SLOTS ||
         !is_keyslot_valid(ssc_state, kbkdf_index)) {
         DPRINTF("%s: invalid kbkdf_index: %u\n", __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     int blk_offset = (kbkdf_index * CMD_METADATA_DATA_PAYLOAD_LENGTH *
                       SSC_REQUEST_MAX_COPIES) +
@@ -4306,7 +4302,7 @@ static int answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state,
     if (err0 == 0) {
         DPRINTF("%s: invalid CMAC\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CMAC_INVALID);
-        return 0;
+        return;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     HEXDUMP("cmd_0x04_req: req_nop_out", req_nop_out, 1);
@@ -4321,13 +4317,11 @@ static int answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state,
                              CMD_METADATA_DATA_PAYLOAD_LENGTH, resp_dec_out,
                              &response[MSG_PREFIX_LENGTH], true, true);
     HEXDUMP("cmd_0x04_resp", response, SSC_RESPONSE_SIZE_CMD_0x4);
-
-    return 0;
 }
 
-static int answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state,
-                                              uint8_t *request,
-                                              uint8_t *response)
+static void answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state,
+                                               uint8_t *request,
+                                               uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x05_req", request, SSC_REQUEST_SIZE_CMD_0x5);
@@ -4339,14 +4333,14 @@ static int answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state,
         DPRINTF("%s: invalid copy: %u\n", __func__, copy);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index == 0 || kbkdf_index >= KBKDF_KEY_MAX_SLOTS ||
         !is_keyslot_valid(ssc_state, kbkdf_index)) {
         DPRINTF("%s: invalid kbkdf_index: %u\n", __func__, kbkdf_index);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     int blk_offset = (kbkdf_index * CMD_METADATA_DATA_PAYLOAD_LENGTH *
                       SSC_REQUEST_MAX_COPIES) +
@@ -4363,7 +4357,7 @@ static int answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state,
     if (err0 == 0) {
         DPRINTF("%s: invalid CMAC\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CMAC_INVALID);
-        return 0;
+        return;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     HEXDUMP("cmd_0x05_req: req_dec_out", req_dec_out,
@@ -4378,12 +4372,10 @@ static int answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state,
         aes_ccm_crypt(ssc_state, kbkdf_index, &response[0x00], 0x0,
                       resp_nop_out, &response[MSG_PREFIX_LENGTH], true, true);
     HEXDUMP("cmd_0x05_resp", response, SSC_RESPONSE_SIZE_CMD_0x5);
-
-    return 0;
 }
 
-static int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
-                                        uint8_t *request, uint8_t *response)
+static void answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
+                                         uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     HEXDUMP("cmd_0x06_req", request, SSC_REQUEST_SIZE_CMD_0x6);
@@ -4398,14 +4390,14 @@ static int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
         DPRINTF("%s: invalid copy: %u\n", __func__, copy);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index_key >= KBKDF_KEY_MAX_SLOTS ||
         !is_keyslot_valid(ssc_state, kbkdf_index_key)) {
         DPRINTF("%s: invalid kbkdf_index_key: %u\n", __func__, kbkdf_index_key);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     if (kbkdf_index_dataslot == 0 ||
         kbkdf_index_dataslot >= KBKDF_KEY_MAX_SLOTS) {
@@ -4413,7 +4405,7 @@ static int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
                 kbkdf_index_dataslot);
         do_response_prefix(request, response,
                            SSC_RESPONSE_FLAG_KEYSLOT_INVALID);
-        return 0;
+        return;
     }
     int blk_offset = (kbkdf_index_dataslot * CMD_METADATA_DATA_PAYLOAD_LENGTH *
                       SSC_REQUEST_MAX_COPIES) +
@@ -4433,7 +4425,7 @@ static int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
     if (err0 == 0) {
         DPRINTF("%s: invalid CMAC\n", __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CMAC_INVALID);
-        return 0;
+        return;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     HEXDUMP("cmd_0x06_req: req_nop_out", req_nop_out, 1);
@@ -4450,19 +4442,24 @@ static int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state,
                              CMD_METADATA_PAYLOAD_LENGTH, resp_dec_out,
                              &response[MSG_PREFIX_LENGTH], true, true);
     HEXDUMP("cmd_0x06_resp", response, SSC_RESPONSE_SIZE_CMD_0x6);
-
-    return 0;
 }
 
-static int answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
-                                uint8_t *request, uint8_t *response)
+static void answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
+                                 uint8_t *request, uint8_t *response)
 {
     struct ecc_point ecc_pub;
     DPRINTF("%s: entered function\n", __func__);
 
     const char *priv_str = "cccccccccccccccccccccccccccccccccccccccccccccccc"
                            "cccccccccccccccccccccccccccccccccccccccccccccccc";
-    int err = generate_ec_priv(priv_str, &ssc_state->ecc_key_main, &ecc_pub);
+    // no NULL here, this should stay static
+    if (generate_ec_priv(priv_str, &ssc_state->ecc_key_main,
+                         &ecc_pub) != 0) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
+                      __func__);
+        do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
+        goto jump_ret;
+    }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     uint8_t unknown0[0x06] = { 0x12, 0x34, 0x56, 0x78, 0x90, 0xab };
     uint8_t cpsn[0x07] = { 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xcc };
@@ -4477,23 +4474,23 @@ static int answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
     output_ec_pub(&ecc_pub,
                   &response[MSG_PREFIX_LENGTH + sizeof(unknown0) +
                             sizeof(ssc_state->cpsn) + sizeof(unknown1)]);
-    ecc_point_clear(&ecc_pub);
 
     HEXDUMP("cmd_0x07_resp", response, SSC_RESPONSE_SIZE_CMD_0x7);
-    return 0;
+
+jump_ret:
+    ecc_point_clear(&ecc_pub);
 }
 
-static int answer_cmd_0x8_sleep(struct AppleSSCState *ssc_state,
-                                uint8_t *request, uint8_t *response)
+static void answer_cmd_0x8_sleep(struct AppleSSCState *ssc_state,
+                                 uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
     HEXDUMP("cmd_0x08_resp", response, SSC_RESPONSE_SIZE_CMD_0x8);
-    return 0;
 }
 
-static int answer_cmd_0x9_panic(struct AppleSSCState *ssc_state,
-                                uint8_t *request, uint8_t *response)
+static void answer_cmd_0x9_panic(struct AppleSSCState *ssc_state,
+                                 uint8_t *request, uint8_t *response)
 {
     DPRINTF("%s: entered function\n", __func__);
     ////apple_ssc_reset(DEVICE(ssc_state));
@@ -4504,7 +4501,6 @@ static int answer_cmd_0x9_panic(struct AppleSSCState *ssc_state,
     memcpy(&response[MSG_PREFIX_LENGTH + 0x24], ssc_state->cpsn,
            sizeof(ssc_state->cpsn));
     HEXDUMP("cmd_0x09_resp", response, SSC_RESPONSE_SIZE_CMD_0x9);
-    return 0;
 }
 
 static uint8_t apple_ssc_rx(I2CSlave *i2c)
