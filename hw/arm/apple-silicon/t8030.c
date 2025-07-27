@@ -923,8 +923,8 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
                       base + addr, base);
     }
 #endif
-    uint64_t security_epoch; // On IMG4: Security Epoch ; On IMG3: Minimum
-                             // Epoch, verified on SecureROM s5l8955xsi
+    int security_epoch = 0x1; // On IMG4: Security Epoch ; On IMG3: Minimum
+                              // Epoch, verified on SecureROM s5l8955xsi
     int current_prod = 1;
     int current_secure_mode = 1; // T8015 SEPOS Kernel also requires this.
     int security_domain = 1;
@@ -932,7 +932,7 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
     int raw_secure_mode = 1;
     // sep_bit30_current_value should stay zero on raw and only change current.
     int sep_bit30_current_value = 0;
-    security_epoch = 0x1;
+    int fuses_locked = 1;
     // current_prod = raw_prod = current_secure_mode = raw_secure_mode = 0;
     switch (base + addr) {
     case 0x3D280088: // PMGR_AON
@@ -986,12 +986,11 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
     case 0x3D2BC410: // raw board id and epoch t8030
         return ((t8030_machine->board_id >> 5) & 0x7) |
                ((security_epoch & 0x7f) << 5) | sep_bit30_current_value |
-               (1 << 31);
+               (fuses_locked << 31);
         // (security epoch & 0x7F) << 5 ;; (sep_bit30 << 30)
-        // for SEP | (1 << 31) for SEP and AP
-    case 0x3D2BC020: // T8030 iBSS: FUN_19c07feac_return_value_causes_crash;
-                     // same address on T8020 iBoot, but possibly different
-                     // handling
+        // for SEP | (1 << 31) for SEP and AP (bit31 == fuses_locked?)
+    case 0x3D2BC020: // T8030: fuses sealed?
+        // only needs to be set when current_prod is enabled
         if (1)
             return 0xA55AC33C;
         return 0xA050C030; // causes panic, so does a invalid value
