@@ -72,34 +72,34 @@
 #include "system/runstate.h"
 #include "system/system.h"
 
-#define T8030_SROM_BASE (0x100000000)
-#define T8030_SROM_SIZE (512 * KiB)
+#define SROM_BASE (0x100000000)
+#define SROM_SIZE (512 * KiB)
 
-#define T8030_SRAM_BASE (0x19C000000)
-#define T8030_SRAM_SIZE (0x400000)
+#define SRAM_BASE (0x19C000000)
+#define SRAM_SIZE (0x400000)
 
-#define T8030_DRAM_BASE (0x800000000)
+#define DRAM_BASE (0x800000000)
 
-#define T8030_SEPROM_BASE (0x240000000)
-#define T8030_SEPROM_SIZE (8 * MiB)
+#define SEPROM_BASE (0x240000000)
+#define SEPROM_SIZE (8 * MiB)
 
-#define T8030_GPIO_FORCE_DFU (161)
+#define GPIO_FORCE_DFU (161)
 
-#define T8030_DISPLAY_SIZE (68 * MiB)
+#define DISPLAY_SIZE (68 * MiB)
 
-#define T8030_DWC2_IRQ (495)
+#define DWC2_IRQ (495)
 
-#define T8030_NUM_UARTS (9)
+#define NUM_UARTS (9)
 
-#define T8030_ANS_TEXT_SIZE (0x124000)
-#define T8030_ANS_DATA_SIZE (0x3C00000)
-#define T8030_SMC_SRAM_SIZE (0x4000)
-#define T8030_SIO_TEXT_SIZE (0x1C000)
-#define T8030_SIO_DATA_SIZE (0xF8000)
-#define T8030_PANIC_SIZE (0x100000)
+#define ANS_TEXT_SIZE (0x124000)
+#define ANS_DATA_SIZE (0x3C00000)
+#define SMC_SRAM_SIZE (0x4000)
+#define SIO_TEXT_SIZE (0x1C000)
+#define SIO_DATA_SIZE (0xF8000)
+#define PANIC_SIZE (0x100000)
 
-#define T8030_AMCC_BASE (0x200000000)
-#define T8030_AMCC_SIZE (0x100000)
+#define AMCC_BASE (0x200000000)
+#define AMCC_SIZE (0x100000)
 #define AMCC_PLANE_COUNT (4)
 #define AMCC_PLANE_STRIDE (0x40000)
 #define AMCC_LOWER(_p) (0x680 + (_p) * AMCC_PLANE_STRIDE)
@@ -143,7 +143,7 @@ static void t8030_create_s3c_uart(const T8030MachineState *t8030_machine,
     DTBNode *child = dtb_get_node(t8030_machine->device_tree, "arm-io/uart0");
     char name[32] = { 0 };
 
-    g_assert_cmpuint(port, <, T8030_NUM_UARTS);
+    g_assert_cmpuint(port, <, NUM_UARTS);
 
     g_assert_nonnull(child);
     snprintf(name, sizeof(name), "uart%d", port);
@@ -345,7 +345,7 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     last_base = last_seg->vmaddr;
     text_base = macho_get_segment(hdr, "__TEXT")->vmaddr;
 
-    g_phys_base = T8030_DRAM_BASE;
+    g_phys_base = DRAM_BASE;
     g_virt_base += g_virt_slide - g_phys_slide;
 
     info->trustcache_addr = vtop_slid(text_base) - info->trustcache_size;
@@ -395,10 +395,8 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     amcc_lower = info->sep_fw_addr;
     amcc_upper = amcc_lower + info->sep_fw_size - 1;
     for (int i = 0; i < 4; i++) {
-        AMCC_REG(t8030_machine, AMCC_LOWER(i)) =
-            (amcc_lower - T8030_DRAM_BASE) >> 14;
-        AMCC_REG(t8030_machine, AMCC_UPPER(i)) =
-            (amcc_upper - T8030_DRAM_BASE) >> 14;
+        AMCC_REG(t8030_machine, AMCC_LOWER(i)) = (amcc_lower - DRAM_BASE) >> 14;
+        AMCC_REG(t8030_machine, AMCC_UPPER(i)) = (amcc_upper - DRAM_BASE) >> 14;
     }
 
     // Kernel boot args
@@ -470,7 +468,7 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
         g_virt_slide += grown_slide;
     }
 
-    g_phys_base = phys_ptr = T8030_DRAM_BASE;
+    g_phys_base = phys_ptr = DRAM_BASE;
     phys_ptr |= (virt_low & L2_GRANULE_MASK);
     phys_ptr += g_phys_slide;
     phys_ptr -= extradata_size;
@@ -528,10 +526,8 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     amcc_lower = info->sep_fw_addr;
     amcc_upper = amcc_lower + info->sep_fw_size - 1;
     for (int i = 0; i < 4; i++) {
-        AMCC_REG(t8030_machine, AMCC_LOWER(i)) =
-            (amcc_lower - T8030_DRAM_BASE) >> 14;
-        AMCC_REG(t8030_machine, AMCC_UPPER(i)) =
-            (amcc_upper - T8030_DRAM_BASE) >> 14;
+        AMCC_REG(t8030_machine, AMCC_LOWER(i)) = (amcc_lower - DRAM_BASE) >> 14;
+        AMCC_REG(t8030_machine, AMCC_UPPER(i)) = (amcc_upper - DRAM_BASE) >> 14;
     }
 
     info->kern_boot_args_addr = phys_ptr;
@@ -623,16 +619,16 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         return;
     }
 
-    info->dram_base = T8030_DRAM_BASE;
+    info->dram_base = DRAM_BASE;
     info->dram_size = machine->maxram_size;
 
     ca = carveout_alloc_new(carveout_memory_map, info->dram_base,
                             info->dram_size, 16 * KiB);
 
     t8030_rtkit_mem_setup(t8030_machine, ca, "sio", "iop-sio-nub",
-                          T8030_SIO_TEXT_SIZE, T8030_SIO_DATA_SIZE, true);
+                          SIO_TEXT_SIZE, SIO_DATA_SIZE, true);
     t8030_rtkit_mem_setup(t8030_machine, ca, "ans", "iop-ans-nub",
-                          T8030_ANS_TEXT_SIZE, T8030_ANS_DATA_SIZE, false);
+                          ANS_TEXT_SIZE, ANS_DATA_SIZE, false);
 
     if (t8030_machine->sep_rom_filename) {
         if (!g_file_get_contents(t8030_machine->sep_rom_filename, &seprom,
@@ -646,7 +642,7 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
                           0x8000000ULL, MEMTXATTRS_UNSPECIFIED);
         address_space_set(&address_space_memory, 0x340000000ULL, 0,
                           0x2000000ULL, MEMTXATTRS_UNSPECIFIED);
-        address_space_rw(&address_space_memory, T8030_SEPROM_BASE,
+        address_space_rw(&address_space_memory, SEPROM_BASE,
                          MEMTXATTRS_UNSPECIFIED, (uint8_t *)seprom, fsize,
                          true);
 
@@ -669,7 +665,7 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
                             MEMTXATTRS_UNSPECIFIED, &value, sizeof(value));
 
         // image4_validate_property_callback: skip AMNM
-        // address_space_write(&address_space_memory, T8030_SEPROM_BASE +
+        // address_space_write(&address_space_memory, SEPROM_BASE +
         // 0x0D2C8,
         //                     MEMTXATTRS_UNSPECIFIED, &value32_nop,
         //                     sizeof(value32_nop));
@@ -677,42 +673,42 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         // maybe_Img4DecodeEvaluateTrust: Skip RSA verification result.
         // not actually stuck, it just takes a while to complete while GDB is in
         // use.
-        // address_space_write(&address_space_memory, T8030_SEPROM_BASE +
+        // address_space_write(&address_space_memory, SEPROM_BASE +
         // 0x1130c,
         //                     MEMTXATTRS_UNSPECIFIED, &value32_nop,
         //                     sizeof(value32_nop));
 
         // maybe_Img4DecodeEvaluateTrust: payload_raw
         // hashing stuck, nop'ing
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x113b0,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x113b0,
                             MEMTXATTRS_UNSPECIFIED, &value32_nop,
                             sizeof(value32_nop));
 
         // maybe_Img4DecodeEvaluateTrust: nop'ing
         // result of payload_raw hashing
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x113b4,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x113b4,
                             MEMTXATTRS_UNSPECIFIED, &value32_nop,
                             sizeof(value32_nop));
 
         // memcmp_validstrs30: fake success
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x0963c,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x0963c,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
                             sizeof(value32_mov_x0_0));
 
         // memcmp_validstrs14: fake success; for nvram bypass?
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x0b574,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x0b574,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
                             sizeof(value32_mov_x0_0));
 
         // load_sepos: jump over
         // img4_compare_verified_values_true_on_success
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x06234,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x06234,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_1,
                             sizeof(value32_mov_x0_1));
 
         // maybe_verify_rsa_signature: return
         // fake return value
-        address_space_write(&address_space_memory, T8030_SEPROM_BASE + 0x11630,
+        address_space_write(&address_space_memory, SEPROM_BASE + 0x11630,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
                             sizeof(value32_mov_x0_0));
 
@@ -748,7 +744,7 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         // *(uint32_t *)vtop_slid(0xFFFFFFF008794F24) = value32_mov_x0_0;
 
         // memcmp_validstrs20: fake success
-        // address_space_write(&address_space_memory, T8030_SEPROM_BASE +
+        // address_space_write(&address_space_memory, SEPROM_BASE +
         // 0x02A04, MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
         // sizeof(value32_mov_x0_0));
 #endif // for T8030 SEPROM
@@ -837,8 +833,8 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
     DTBNode *pram = dtb_get_node(t8030_machine->device_tree, "pram");
     if (pram) {
         uint64_t panic_reg[2];
-        panic_reg[0] = carveout_alloc_mem(ca, T8030_PANIC_SIZE);
-        panic_reg[1] = T8030_PANIC_SIZE;
+        panic_reg[0] = carveout_alloc_mem(ca, PANIC_SIZE);
+        panic_reg[1] = PANIC_SIZE;
         dtb_set_prop(pram, "reg", sizeof(panic_reg), &panic_reg);
         dtb_set_prop_u64(chosen, "embedded-panic-log-size", panic_reg[1]);
         t8030_machine->panic_base = panic_reg[0];
@@ -848,15 +844,15 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
     DTBNode *vram = dtb_get_node(t8030_machine->device_tree, "vram");
     if (vram) {
         t8030_machine->video_args.base_addr =
-            carveout_alloc_mem(ca, T8030_DISPLAY_SIZE);
+            carveout_alloc_mem(ca, DISPLAY_SIZE);
         uint64_t vram_reg[2];
         vram_reg[0] = t8030_machine->video_args.base_addr;
-        vram_reg[1] = T8030_DISPLAY_SIZE;
+        vram_reg[1] = DISPLAY_SIZE;
         dtb_set_prop(vram, "reg", sizeof(vram_reg), &vram_reg);
         adp_v4_update_vram_mapping(
             APPLE_DISPLAY_PIPE_V4(object_property_get_link(
                 OBJECT(t8030_machine), "disp0", &error_abort)),
-            machine->ram, t8030_machine->video_args.base_addr - T8030_DRAM_BASE,
+            machine->ram, t8030_machine->video_args.base_addr - DRAM_BASE,
             vram_reg[1]);
     }
 
@@ -1091,8 +1087,7 @@ static uint64_t amcc_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     T8030MachineState *t8030_machine = T8030_MACHINE(opaque);
     uint64_t result = 0;
-    uint64_t base =
-        t8030_machine->boot_info.top_of_kernel_data_pa - T8030_DRAM_BASE;
+    uint64_t base = t8030_machine->boot_info.top_of_kernel_data_pa - DRAM_BASE;
     uint64_t amcc_size = 0xf000000;
     switch (addr) {
     case 0x6A0:
@@ -1358,7 +1353,7 @@ static void t8030_amcc_setup(T8030MachineState *t8030_machine)
     dtb_set_prop_u32(child, "aperture-size", 0x100000);
     dtb_set_prop_u32(child, "plane-count", AMCC_PLANE_COUNT);
     dtb_set_prop_u32(child, "plane-stride", AMCC_PLANE_STRIDE);
-    dtb_set_prop_hwaddr(child, "aperture-phys-addr", T8030_AMCC_BASE);
+    dtb_set_prop_hwaddr(child, "aperture-phys-addr", AMCC_BASE);
     dtb_set_prop_u32(child, "cache-status-reg-offset", 0x1C00);
     dtb_set_prop_u32(child, "cache-status-reg-mask", 0x1F);
     dtb_set_prop_u32(child, "cache-status-reg-value", 0);
@@ -1376,9 +1371,8 @@ static void t8030_amcc_setup(T8030MachineState *t8030_machine)
     dtb_set_prop_u32(child, "lock-reg-value", 1);
 
     memory_region_init_io(&t8030_machine->amcc, OBJECT(t8030_machine),
-                          &amcc_reg_ops, t8030_machine, "amcc",
-                          T8030_AMCC_SIZE);
-    memory_region_add_subregion(get_system_memory(), T8030_AMCC_BASE,
+                          &amcc_reg_ops, t8030_machine, "amcc", AMCC_SIZE);
+    memory_region_add_subregion(get_system_memory(), AMCC_BASE,
                                 &t8030_machine->amcc);
 }
 
@@ -1745,9 +1739,8 @@ static void t8030_create_usb(T8030MachineState *t8030_machine)
             SYS_BUS_DEVICE(atc), i,
             qdev_get_gpio_in(DEVICE(t8030_machine->aic), ints[i]));
     }
-    sysbus_connect_irq(
-        SYS_BUS_DEVICE(atc), 4,
-        qdev_get_gpio_in(DEVICE(t8030_machine->aic), T8030_DWC2_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(atc), 4,
+                       qdev_get_gpio_in(DEVICE(t8030_machine->aic), DWC2_IRQ));
 }
 
 static void t8030_create_wdt(T8030MachineState *t8030_machine)
@@ -2315,7 +2308,7 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
     sep = apple_sep_create(
         child,
         MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
-        T8030_SEPROM_BASE, A13_MAX_CPU + 1, t8030_machine->build_version, true,
+        SEPROM_BASE, A13_MAX_CPU + 1, t8030_machine->build_version, true,
         chip_id);
     g_assert_nonnull(sep);
 
@@ -2643,7 +2636,7 @@ static void t8030_machine_reset(MachineState *machine, ResetType type)
 
     gpio = DEVICE(
         object_property_get_link(OBJECT(t8030_machine), "gpio", &error_fatal));
-    qemu_set_irq(qdev_get_gpio_in(gpio, T8030_GPIO_FORCE_DFU),
+    qemu_set_irq(qdev_get_gpio_in(gpio, GPIO_FORCE_DFU),
                  t8030_machine->force_dfu);
 }
 
@@ -2675,15 +2668,12 @@ static void t8030_machine_init(MachineState *machine)
         return;
     }
 
-    allocate_ram(get_system_memory(), "SROM", T8030_SROM_BASE, T8030_SROM_SIZE,
-                 0);
-    allocate_ram(get_system_memory(), "SRAM", T8030_SRAM_BASE, T8030_SRAM_SIZE,
-                 0);
-    memory_region_add_subregion(get_system_memory(), T8030_DRAM_BASE,
-                                machine->ram);
+    allocate_ram(get_system_memory(), "SROM", SROM_BASE, SROM_SIZE, 0);
+    allocate_ram(get_system_memory(), "SRAM", SRAM_BASE, SRAM_SIZE, 0);
+    memory_region_add_subregion(get_system_memory(), DRAM_BASE, machine->ram);
     if (t8030_machine->sep_rom_filename != NULL) {
-        allocate_ram(get_system_memory(), "SEPROM", T8030_SEPROM_BASE,
-                     T8030_SEPROM_SIZE, 0);
+        allocate_ram(get_system_memory(), "SEPROM", SEPROM_BASE, SEPROM_SIZE,
+                     0);
         // 0x4000000 is too low
         allocate_ram(get_system_memory(), "DRAM_30", 0x300000000ULL,
                      0x8000000ULL, 0);
@@ -2834,7 +2824,7 @@ static void t8030_machine_init(MachineState *machine)
     t8030_cpu_setup(t8030_machine);
     t8030_create_aic(t8030_machine);
 
-    for (int i = 0; i < T8030_NUM_UARTS; i++) {
+    for (int i = 0; i < NUM_UARTS; i++) {
         t8030_create_s3c_uart(t8030_machine, i, serial_hd(i));
     }
 
