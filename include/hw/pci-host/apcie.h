@@ -48,8 +48,6 @@ OBJECT_DECLARE_SIMPLE_TYPE(ApplePCIEState, APPLE_PCIE)
 
 #define APCIE_MAX_PORTS 4
 
-// #define APCIE_PORT_GPIO_CLKREQ "apcie-port-gpio-clkreq"
-#define APCIE_PORT_GPIO_CLKREQ_IN "apcie-port-gpio-clkreq-in"
 #define APCIE_PORT_GPIO_CLKREQ_OUT "apcie-port-gpio-clkreq-out"
 #define APCIE_PORT_GPIO_PERST "apcie-port-gpio-perst"
 

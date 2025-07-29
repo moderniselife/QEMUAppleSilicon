@@ -82,6 +82,10 @@ static void apple_nvme_mmu_common_reg_write(void *opaque, hwaddr addr,
         break;
     case 0x2c: // arg5: sart_region_val0 >> 20
         break;
+    case 0x30: // prp
+        // (tag & 0x7f) << 23
+        // (sector & 0x7ff) << 12
+        break;
     default:
         break;
     }

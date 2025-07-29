@@ -91,21 +91,6 @@ static void apcie_port_gpio_set_clkreq(DeviceState *dev, int level)
     qemu_set_irq(port->apcie_port_gpio_clkreq_irq, level);
 }
 
-static void apcie_port_gpio_clkreq(void *opaque, int n, int level)
-{
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
-    bool val = !!level;
-    assert(n == 0);
-    DPRINTF("%s: iOS set_val: old: %d ; new %d\n", __func__,
-            port->gpio_clkreq_val, val);
-    if (port->gpio_clkreq_val != val) {
-        //
-    }
-    port->gpio_clkreq_val = val;
-    // apcie_port_gpio_set_clkreq(DEVICE(port), 0);
-    apcie_port_gpio_set_clkreq(DEVICE(port), 1);
-}
-
 static void apcie_port_gpio_perst(void *opaque, int n, int level)
 {
     ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
@@ -448,6 +433,8 @@ static void apple_pcie_root_common_write(void *opaque, hwaddr addr,
                                          uint64_t data, unsigned int size)
 {
     ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEPort *port;
+    int i;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -465,12 +452,26 @@ static void apple_pcie_root_common_write(void *opaque, hwaddr addr,
         if (data == 0x11) {
             host->root_common_regs[0x114 >> 2] = 0x100;
             // for S8000/N66AP
-            host->root_common_regs[0x2c >> 2] = 0x11;
+            //host->root_common_regs[0x2c >> 2] = 0x11;
+            host->root_common_regs[0x2c >> 2] = 0x1;
             // for S8000/N66AP, mayber lower for S8003, dunno.
             host->root_common_regs[0x12c >> 2] = 0x1;
 #if 0
             if (host->clkreq_gpio_id != 0) {
                 machine_set_gpio(host->clkreq_gpio_id, host->clkreq_gpio_value);
+            }
+#endif
+        }
+        break;
+    case 0x38:
+        if (data == 0x1) {
+            // for S8000/N66AP
+            host->root_common_regs[0x2c >> 2] |= 0x10;
+#if 1
+            for (i=0; i < APCIE_MAX_PORTS; i++) {
+                port = host->pcie->ports[i];
+                //////apcie_port_gpio_set_clkreq(DEVICE(port), 0);
+                apcie_port_gpio_set_clkreq(DEVICE(port), 1);
             }
 #endif
         }
@@ -1184,7 +1185,7 @@ static void apple_pcie_port_config_ltssm_debug_write(void *opaque, hwaddr addr,
                                                      uint64_t data,
                                                      unsigned size)
 {
-    ApplePCIEPort *port = opaque;
+    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
 
     DPRINTF("%s: Port %u: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
             "\n",
@@ -1466,7 +1467,7 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         // dtb_set_prop_u32(child, "ltssm-timeout", 0);
 
         // TODO: for S800x, until the GPIO shitshow gets fixed
-        dtb_remove_prop_named(child, "clkreq-wait-time");
+        //dtb_remove_prop_named(child, "clkreq-wait-time");
 
         dart = APPLE_DART(object_property_get_link(OBJECT(qdev_get_machine()),
                                                    dart_name, &error_fatal));
@@ -1480,17 +1481,12 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         port->dma_mr = MEMORY_REGION(dma_mr);
 
 #if 1
-        qdev_init_gpio_in_named(DEVICE(port), apcie_port_gpio_clkreq,
-                                APCIE_PORT_GPIO_CLKREQ_IN, 1);
         qdev_init_gpio_out_named(DEVICE(port),
                                  &port->apcie_port_gpio_clkreq_irq,
                                  APCIE_PORT_GPIO_CLKREQ_OUT, 1);
         qdev_init_gpio_in_named(DEVICE(port), apcie_port_gpio_perst,
                                 APCIE_PORT_GPIO_PERST, 1);
 
-        connect_function_prop_out_in_gpio(
-            DEVICE(port), dtb_find_prop(child, "function-clkreq"),
-            APCIE_PORT_GPIO_CLKREQ_IN);
         connect_function_prop_in_out_gpio(
             DEVICE(port), dtb_find_prop(child, "function-clkreq"),
             APCIE_PORT_GPIO_CLKREQ_OUT);

@@ -775,10 +775,22 @@ static void s8000_create_pcie(S8000MachineState *s8000_machine)
     prop = dtb_find_prop(child, "interrupts");
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
+    int interrupts_count = prop->length / sizeof(uint32_t);
 
-    for (i = 0; i < prop->length / sizeof(uint32_t); i++) {
+    for (i = 0; i < interrupts_count; i++) {
         sysbus_connect_irq(
             pcie, i, qdev_get_gpio_in(DEVICE(s8000_machine->aic), ints[i]));
+    }
+    prop = dtb_find_prop(child, "msi-vector-offset");
+    g_assert_nonnull(prop);
+    uint32_t msi_vector_offset = *(uint32_t *)prop->data;
+    prop = dtb_find_prop(child, "#msi-vectors");
+    g_assert_nonnull(prop);
+    uint32_t msi_vectors = *(uint32_t *)prop->data;
+    for (i = 0; i < msi_vectors; i++) {
+        sysbus_connect_irq(pcie, interrupts_count + i,
+                           qdev_get_gpio_in(DEVICE(s8000_machine->aic),
+                                            msi_vector_offset + i));
     }
 
     sysbus_realize_and_unref(pcie, &error_fatal);

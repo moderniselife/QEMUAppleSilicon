@@ -116,6 +116,9 @@ static void apple_gpio_update_pincfg(AppleGPIOState *s, int pin, uint32_t value)
         // Visual: Not sure, but here's some more logic :^)
         switch (value & FUNC_MASK) {
         case FUNC_ALT0:
+            if ((value & CFG_MASK) == CFG_DISABLE) {
+                break;
+            }
             if ((value & CFG_MASK) == CFG_GP_OUT) {
                 s->gpio_cfg[pin] &= ~DATA_1;
             } else {
@@ -264,6 +267,19 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
         val &= ~DATA_1;
         val |= test_bit32(pin, s->in);
     }
+
+#if 1
+    if (((val & CFG_FUNC0) == CFG_FUNC0) && ((val & CFG_MASK) == CFG_DISABLE)) {
+        //val &= ~DATA_1;
+        //val |= test_bit32(pin, s->in);
+        // TODO: Not even remotely sure if that's correct, but it makes apcie
+        // work while at the same time avoiding i2c bus troubles, that would
+        // happen if it would be like above
+        // maybe the gpio-iic_scl/sda handling needs to be fixed (instead)
+        val |= DATA_1;
+        val &= ~test_bit32(pin, s->in);
+    }
+#endif
 
     return val;
 }
