@@ -150,8 +150,9 @@ struct ApplePCIEState {
 
     ApplePCIEHost *host;
     ApplePCIEPort *ports[APCIE_MAX_PORTS];
+    uint32_t chip_id;
 };
 
-SysBusDevice *apple_pcie_create(DTBNode *node);
+SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id);
 
 #endif /* APCIE_H */

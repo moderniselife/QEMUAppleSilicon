@@ -2092,6 +2092,12 @@ static void t8030_create_pcie(T8030MachineState *t8030_machine)
     // char temp_name[32];
     // uint32_t port_index, port_entries;
 
+    prop = dtb_find_prop(dtb_get_node(t8030_machine->device_tree, "chosen"),
+                         "chip-id");
+    g_assert_nonnull(prop);
+    ////uint32_t chip_id = *(uint32_t *)prop->data;
+    uint32_t chip_id = 0x8030; // needed because of the AGX workaround
+
     DTBNode *child = dtb_get_node(t8030_machine->device_tree, "arm-io");
     g_assert_nonnull(child);
     child = dtb_get_node(child, "apcie");
@@ -2102,7 +2108,7 @@ static void t8030_create_pcie(T8030MachineState *t8030_machine)
     // do not use no-phy-power-gating for T8030
     //// dtb_set_prop_null(child, "no-phy-power-gating");
 
-    pcie = apple_pcie_create(child);
+    pcie = apple_pcie_create(child, chip_id);
     g_assert_nonnull(pcie);
     object_property_add_child(OBJECT(t8030_machine), "pcie", OBJECT(pcie));
 
@@ -2288,7 +2294,7 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
     prop = dtb_find_prop(dtb_get_node(t8030_machine->device_tree, "chosen"),
                          "chip-id");
     g_assert_nonnull(prop);
-    ////uint32_t chip_id = *(uint32_t *)prop->value;
+    ////uint32_t chip_id = *(uint32_t *)prop->data;
     uint32_t chip_id = 0x8030; // needed because of the AGX workaround
 
     armio = dtb_get_node(t8030_machine->device_tree, "arm-io");

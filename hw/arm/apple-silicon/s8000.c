@@ -50,6 +50,7 @@
 #include "qapi/visitor.h"
 #include "qemu/error-report.h"
 #include "qemu/guest-random.h"
+#include "qemu/log.h"
 #include "qemu/units.h"
 #include "system/reset.h"
 #include "system/runstate.h"
@@ -75,9 +76,15 @@
 #define S8000_SEPROM_BASE 0x20D000000ull
 #define S8000_SEPROM_SIZE 0x1000000ull
 
+// Carveout region 0x2 ; this is the first region
+#define S8000_NVME_SART_BASE (S8000_DRAM_BASE + 0x7F400000ull)
+#define S8000_NVME_SART_SIZE 0xc00000ull
+
+// regions 0x1/0x7/0xa are in between, each with a size of 0x4000 bytes.
+
 // Carveout region 0xC
-#define S8000_PANIC_BASE (S8000_DRAM_BASE + 0x7F374000ull)
 #define S8000_PANIC_SIZE 0x80000ull
+#define S8000_PANIC_BASE (S8000_NVME_SART_BASE - S8000_PANIC_SIZE - 0xc000ull)
 
 // Carveout region 0x50
 #define S8000_REGION_50_SIZE 0x18000ull
@@ -494,8 +501,8 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
 #if 0
         qemu_log_mask(LOG_UNIMP,
                       "PMGR reg READ unk @ 0x" TARGET_FMT_lx
-                      " base: 0x" TARGET_FMT_lx "\n",
-                      base + addr, base);
+                      " base: 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx "\n",
+                      base + addr, base, 0);
 #endif
         break;
     }
@@ -541,11 +548,14 @@ static uint64_t pmgr_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     S8000MachineState *s8000_machine = S8000_MACHINE(opaque);
     uint64_t result = 0;
-#if 0
-    qemu_log_mask(LOG_UNIMP, "PMGR reg READ @ 0x" TARGET_FMT_lx "\n", addr);
-#endif
 
     memcpy(&result, s8000_machine->pmgr_reg + addr, size);
+#if 0
+    qemu_log_mask(LOG_UNIMP,
+                  "PMGR reg READ @ 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx
+                  "\n",
+                  addr, result);
+#endif
     return result;
 }
 
@@ -739,16 +749,18 @@ static void s8000_create_pcie(S8000MachineState *s8000_machine)
     uint64_t *reg;
     SysBusDevice *pcie;
 
-    DTBNode *child = dtb_get_node(s8000_machine->device_tree, "arm-io");
-    g_assert_nonnull(child);
-    child = dtb_get_node(child, "apcie");
+    prop = dtb_find_prop(dtb_get_node(s8000_machine->device_tree, "chosen"),
+                         "chip-id");
+    g_assert_nonnull(prop);
+    uint32_t chip_id = *(uint32_t *)prop->data;
+
+    DTBNode *child = dtb_get_node(s8000_machine->device_tree, "arm-io/apcie");
     g_assert_nonnull(child);
 
-    dtb_set_prop_null(
-        child, "apcie-phy-tunables"); // TODO: S8000 needs it, and probably
-                                      // T8030 does need it as well.
+    // TODO: S8000 needs it, and probably T8030 does need it as well.
+    dtb_set_prop_null(child, "apcie-phy-tunables");
 
-    pcie = apple_pcie_create(child);
+    pcie = apple_pcie_create(child, chip_id);
     g_assert_nonnull(pcie);
     object_property_add_child(OBJECT(s8000_machine), "pcie", OBJECT(pcie));
 
@@ -780,11 +792,31 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     uint64_t *reg;
     SysBusDevice *nvme;
     AppleNVMeMMUState *s;
-    DTBNode *child;
+    DTBNode *child, *child_s3e;
     ApplePCIEHost *apcie_host;
 
     child = dtb_get_node(s8000_machine->device_tree, "arm-io/nvme-mmu0");
     g_assert_nonnull(child);
+
+    child_s3e = dtb_get_node(s8000_machine->device_tree, "arm-io/apcie/pci-bridge0/s3e");
+    g_assert_nonnull(child_s3e);
+
+    // might also work without the sart regions?
+
+    uint64_t sart_region[2];
+    sart_region[0] = S8000_NVME_SART_BASE;
+    sart_region[1] = S8000_NVME_SART_SIZE;
+    dtb_set_prop(child, "sart-region", sizeof(sart_region), &sart_region);
+
+    uint32_t sart_virtual_base;
+    prop = dtb_find_prop(child, "sart-virtual-base");
+    g_assert_nonnull(prop);
+    sart_virtual_base = *(uint32_t *)prop->data;
+
+    uint64_t nvme_scratch_virt_region[2];
+    nvme_scratch_virt_region[0] = sart_virtual_base;
+    nvme_scratch_virt_region[1] = S8000_NVME_SART_SIZE;
+    dtb_set_prop(child_s3e, "nvme-scratch-virt-region", sizeof(nvme_scratch_virt_region), &nvme_scratch_virt_region);
 
     PCIBridge *pci = PCI_BRIDGE(object_property_get_link(
         OBJECT(s8000_machine), "pcie.bridge0", &error_fatal));
@@ -801,9 +833,7 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < 2; i++) {
-        sysbus_mmio_map(nvme, i, reg[i << 1]);
-    }
+    sysbus_mmio_map(nvme, 0, reg[0]);
 
     prop = dtb_find_prop(child, "interrupts");
     g_assert_nonnull(prop);

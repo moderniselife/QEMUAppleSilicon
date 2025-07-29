@@ -853,7 +853,8 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
     // case DESIGNWARE_PCIE_MSI_INTR0_STATUS:
     //     val = port->msi.intr[msi_intr_index].status;
     //     break;
-    case 0x208: // linksts ; for getLinkUp/isLinkInL2.
+    case 0x88: // S800x linksts
+    case 0x208: // T8030 linksts ; for getLinkUp/isLinkInL2.
         // I've no idea what I should return for bit6
         // bit6 might need to be set for waitForL2Entry/disableGated
         // TODO: maybe only set bit6 on link-down
@@ -864,7 +865,15 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
         // getLinkUp val = (is_port_enabled << 0); // getLinkUp
         ////val |= (0 << 6); // isLinkInL2
         // val |= (1 << 6); // isLinkInL2
-        port->is_link_up = is_port_enabled;
+        if (addr == 0x88 && (port->host->pcie->chip_id == 0x8000 || port->host->pcie->chip_id == 0x8003)) {
+            port->is_link_up = (port->port_ltssm_enable & 1) != 0;
+            DPRINTF("%s: Port %u: S800x linksts: is_link_up: %d\n",
+                    __func__, port->bus_nr, port->is_link_up);
+        } else {
+            port->is_link_up = is_port_enabled;
+            DPRINTF("%s: Port %u: T8030/else linksts: is_link_up: %d\n",
+                    __func__, port->bus_nr, port->is_link_up);
+        }
         val = (port->is_link_up << 0); // getLinkUp
         ////val |= 0x8040000c;
 #if 0
@@ -1373,10 +1382,9 @@ static void apple_pcie_host_reset(DeviceState *dev)
     memset(host->root_common_regs, 0, sizeof(host->root_common_regs));
 }
 
-#if 1
 static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
-                                             qemu_irq irq, bool use_t8030,
-                                             PCIBus *bus, ApplePCIEHost *host)
+                                             qemu_irq irq, PCIBus *bus,
+                                             ApplePCIEHost *host)
 {
     // DeviceState *dev;
     PCIDevice *pci_dev;
@@ -1426,7 +1434,7 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
     } else {
         port->manual_enable = false;
     }
-    if (use_t8030) {
+    if (host->pcie->chip_id == 0x8020 || host->pcie->chip_id == 0x8030) {
         device_id = 0x1002;
         // device_id = 0x1003;
     } else if (child != NULL) {
@@ -1456,6 +1464,9 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         // dtb_set_prop_u32(child, "allow-endpoint-reset", 0);
         ////dtb_set_prop_u32(child, "clkreq-wait-time", 100);
         // dtb_set_prop_u32(child, "ltssm-timeout", 0);
+
+        // TODO: for S800x, until the GPIO shitshow gets fixed
+        dtb_remove_prop_named(child, "clkreq-wait-time");
 
         dart = APPLE_DART(object_property_get_link(OBJECT(qdev_get_machine()),
                                                    dart_name, &error_fatal));
@@ -1538,10 +1549,8 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
 
     return port;
 }
-#endif
 
-#if 1
-SysBusDevice *apple_pcie_create(DTBNode *node)
+SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
 {
     DeviceState *dev;
     ApplePCIEState *s;
@@ -1566,16 +1575,12 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
     host = APPLE_PCIE_HOST(host_dev);
     host->pcie = s;
     s->host = host;
+    s->chip_id = chip_id;
 
     s->node = node;
     prop = dtb_find_prop(s->node, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
-
-    const char *s800x_compatible_substring = "apcie,s800";
-
-    prop = dtb_find_prop(s->node, "compatible");
-    g_assert_nonnull(prop);
 
     for (i = 0; i < ARRAY_SIZE(host->irqs); i++) {
         sysbus_init_irq(sbd, &host->irqs[i]);
@@ -1586,10 +1591,9 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
 
     uint64_t common_index, port_index, port_count, port_entries, root_mappings,
         port_mappings;
-    bool use_t8030;
 
-    if (strncmp((char *)prop->data, s800x_compatible_substring,
-                strlen(s800x_compatible_substring)) == 0) {
+    // t8015 is similar to s800x
+    if (chip_id == 0x8000 || chip_id == 0x8003) {
         DPRINTF("%s: compatible check: use S8000(/S8003) mode\n", __func__);
 
         common_index = 9;
@@ -1598,8 +1602,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
         port_entries = 2;
         root_mappings = 2;
         port_mappings = 1;
-        use_t8030 = false;
-    } else {
+    } else if (chip_id == 0x8020 || chip_id == 0x8030) {
         DPRINTF("%s: compatible check: use T8030(/T8020) mode\n", __func__);
 
         common_index = 1;
@@ -1608,14 +1611,15 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
         port_entries = 4;
         root_mappings = 5;
         port_mappings = 4;
-        use_t8030 = true;
+    } else {
+        g_assert_not_reached();
     }
 
     sysbus_realize_and_unref(SYS_BUS_DEVICE(host_dev), &error_fatal);
     pci = PCI_HOST_BRIDGE(host_dev);
     for (i = 0; i < port_count; i++) {
-        s->ports[i] = apple_pcie_create_port(node, i, host->irqs[i], use_t8030,
-                                             pci->bus, host);
+        s->ports[i] = apple_pcie_create_port(node, i, host->irqs[i], pci->bus,
+                                             host);
     }
     g_assert_cmpuint(reg[common_index * 2 + 1], <=, APCIE_COMMON_REGS_LENGTH);
 
@@ -1629,7 +1633,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
                           reg[common_index * 2 + 1]);
     sysbus_init_mmio(sbd, &host->root_common);
     sysbus_mmio_map(sbd, 1, reg[common_index * 2]);
-    if (use_t8030) {
+    if (chip_id == 0x8020 || chip_id == 0x8030) {
         memory_region_init_io(&host->root_phy, OBJECT(host),
                               &apple_pcie_host_root_phy_ops, host, "root_phy",
                               reg[2 * 2 + 1]);
@@ -1665,7 +1669,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
         sysbus_init_mmio(sbd, &port->port_cfg);
         sysbus_mmio_map(sbd, root_mappings + 0 + (i * port_mappings),
                         reg[(port_index + (i * port_entries) + 0) * 2 + 0]);
-        if (use_t8030) {
+        if (chip_id == 0x8020 || chip_id == 0x8030) {
             snprintf(temp_name, sizeof(temp_name), "port%u_config_ltssm_debug",
                      i);
             memory_region_init_io(
@@ -1701,7 +1705,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
         }
     }
 
-    if (use_t8030) {
+    if (chip_id == 0x8020 || chip_id == 0x8030) {
         pci_set_power(PCI_DEVICE(s->ports[0]), false);
         pci_set_power(PCI_DEVICE(s->ports[1]), false);
         // pci_set_power(PCI_DEVICE(s->ports[2]), false);
@@ -1714,7 +1718,6 @@ SysBusDevice *apple_pcie_create(DTBNode *node)
 
     return sbd;
 }
-#endif
 
 static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
 {

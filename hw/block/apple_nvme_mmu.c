@@ -59,10 +59,28 @@ static void apple_nvme_mmu_common_reg_write(void *opaque, hwaddr addr,
         val = 0x6000;
         break;
 #endif
-    case 0x4:
+#if 1
+    case 0x4: // e.g. reset
         if ((data & (1 << 16)) != 0) {
             data &= ~(1 << 16);
         }
+        break;
+#endif
+    case 0x8: // tcb physical lower
+        break;
+    case 0xc: // tcb physical upper
+        break;
+    case 0x10: // something physical lower ; maybe scratch buffer?
+        break;
+    case 0x14: // something physical upper ; maybe scratch buffer?
+        break;
+    case 0x20: // arg2_set_addrs: 0x1 if sync/set addresses, 0x0 if not
+        break;
+    case 0x24: // arg3_sart_virtual_base_val_aligned
+        break;
+    case 0x28: // arg4: sart_region_val1_plus_virtual_base_minus_0x100000
+        break;
+    case 0x2c: // arg5: sart_region_val0 >> 20
         break;
     default:
         break;
@@ -89,6 +107,24 @@ static uint64_t apple_nvme_mmu_common_reg_read(void *opaque, hwaddr addr,
         val = 0x6000;
         break;
 #endif
+    case 0x4: // e.g. reset
+        break;
+    case 0x8: // tcb physical lower
+        break;
+    case 0xc: // tcb physical upper
+        break;
+    case 0x30: // prp
+        // (tag & 0x7f) << 23
+        // (sector & 0x7ff) << 12
+        break;
+    case 0x34: // error
+        break;
+    case 0x38: // ignored?
+        break;
+    case 0x40: // tag
+        // (incrypto_tag & 0x7f) << 0
+        // (outcrypto_tag & 0x7f) << 8
+        break;
     default:
         break;
     }
@@ -101,71 +137,6 @@ static uint64_t apple_nvme_mmu_common_reg_read(void *opaque, hwaddr addr,
 static const MemoryRegionOps apple_nvme_mmu_common_reg_ops = {
     .write = apple_nvme_mmu_common_reg_write,
     .read = apple_nvme_mmu_common_reg_read,
-    .endianness = DEVICE_NATIVE_ENDIAN,
-    .impl.min_access_size = 4,
-    .impl.max_access_size = 4,
-    .valid.min_access_size = 4,
-    .valid.max_access_size = 4,
-    .valid.unaligned = false,
-};
-
-static void apple_nvme_mmu_config_reg_write(void *opaque, hwaddr addr,
-                                            uint64_t data, unsigned size)
-{
-    AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
-    uint32_t *mmio = &s->config_reg[addr >> 2];
-    DPRINTF("apple_nvme_mmu: config reg WRITE @ 0x" HWADDR_FMT_plx
-            " value: 0x" HWADDR_FMT_plx "\n",
-            addr, data);
-    switch (addr) {
-#if 0
-    case NVME_APPLE_MAX_PEND_CMDS:
-        val = NVME_APPLE_MAX_PEND_CMDS_VAL;
-        break;
-    case NVME_APPLE_BOOT_STATUS:
-        val = NVME_APPLE_BOOT_STATUS_OK;
-        break;
-    case NVME_APPLE_BASE_CMD_ID:
-        val = 0x6000;
-        break;
-#endif
-    default:
-        break;
-    }
-    *mmio = data;
-}
-
-static uint64_t apple_nvme_mmu_config_reg_read(void *opaque, hwaddr addr,
-                                               unsigned size)
-{
-    AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
-    uint32_t *mmio = &s->config_reg[addr >> 2];
-    uint32_t val = *mmio;
-
-    switch (addr) {
-#if 0
-    case NVME_APPLE_MAX_PEND_CMDS:
-        val = NVME_APPLE_MAX_PEND_CMDS_VAL;
-        break;
-    case NVME_APPLE_BOOT_STATUS:
-        val = NVME_APPLE_BOOT_STATUS_OK;
-        break;
-    case NVME_APPLE_BASE_CMD_ID:
-        val = 0x6000;
-        break;
-#endif
-    default:
-        break;
-    }
-    DPRINTF("apple_nvme_mmu: config reg READ @ 0x" HWADDR_FMT_plx
-            " value: 0x%x\n",
-            addr, val);
-    return val;
-}
-
-static const MemoryRegionOps apple_nvme_mmu_config_reg_ops = {
-    .write = apple_nvme_mmu_config_reg_write,
-    .read = apple_nvme_mmu_config_reg_read,
     .endianness = DEVICE_NATIVE_ENDIAN,
     .impl.min_access_size = 4,
     .impl.max_access_size = 4,
@@ -230,10 +201,6 @@ SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus)
                           &apple_nvme_mmu_common_reg_ops, s,
                           TYPE_APPLE_NVME_MMU ".common-reg", reg[1]);
     sysbus_init_mmio(sbd, &s->common);
-    memory_region_init_io(&s->config, OBJECT(dev),
-                          &apple_nvme_mmu_config_reg_ops, s,
-                          TYPE_APPLE_NVME_MMU ".config-reg", reg[3]);
-    sysbus_init_mmio(sbd, &s->config);
 
     return sbd;
 }
@@ -243,7 +210,6 @@ static void apple_nvme_mmu_realize(DeviceState *dev, Error **errp)
     AppleNVMeMMUState *s = APPLE_NVME_MMU(dev);
 
     PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
-    //pci_bus_irqs(s->pci_bus, apple_nvme_mmu_set_irq, s, 4);
     qdev_realize(DEVICE(s->nvme), BUS(s->pci_bus), &error_fatal);
     g_assert_true(pci_is_express(pci_dev));
     pcie_endpoint_cap_init(pci_dev, 0);
