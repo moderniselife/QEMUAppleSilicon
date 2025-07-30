@@ -179,8 +179,26 @@ static const MemoryRegionOps apple_ans_vendor_reg_ops = {
 
 static void apple_ans_set_irq(void *opaque, int irq_num, int level)
 {
+    // msi_enabled stays disabled and pci_set_irq doesn't work for ans, maybe
+    // because the pci device isn't exposed.
     AppleANSState *s = APPLE_ANS(opaque);
     qemu_set_irq(s->irq, level);
+#if 0
+    //return;
+    PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
+#if 1
+    if (msi_enabled(pci_dev)) {
+        if (level) {
+            msi_notify(pci_dev, 0);
+        }
+    } else
+#endif
+    {
+        // pci_set_irq might work for s3e, but not for ans, maybe because the pci device isn't exposed.
+        pci_set_irq(pci_dev, level);
+        //qemu_set_irq(s->irq, level);
+    }
+#endif
 }
 
 static void apple_ans_start(void *opaque)

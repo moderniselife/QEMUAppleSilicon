@@ -1501,10 +1501,13 @@ static void t8030_create_ans(T8030MachineState *t8030_machine)
             ans, i, qdev_get_gpio_in(DEVICE(t8030_machine->aic), ints[i]));
     }
 
+#if 1
+    // needed for ANS
     uint32_t bridge_index = 0;
     qdev_connect_gpio_out_named(
         DEVICE(apcie_host), "interrupt_pci", bridge_index,
         qdev_get_gpio_in_named(DEVICE(ans), "interrupt_pci", 0));
+#endif
 
     sysbus_realize_and_unref(ans, &error_fatal);
 }
@@ -1929,6 +1932,7 @@ static void t8030_create_baseband_spmi(T8030MachineState *t8030_machine,
 
 #if 1
     child = dtb_get_node(t8030_machine->device_tree, "baseband");
+    g_assert_nonnull(child);
     prop = dtb_find_prop(child, "interrupts");
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;

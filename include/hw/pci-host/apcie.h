@@ -119,7 +119,9 @@ struct ApplePCIEPort {
     MemoryRegion port_config_ltssm_debug;
 
     uint32_t port_ltssm_enable; // 0x80
+    uint32_t port_pme_to_ack; // 0x8c
     uint32_t port_last_interrupt; // 0x100
+    uint32_t port_interrupt_mask; // 0x104
     uint32_t port_hotreset; // 0x13c
     uint32_t port_cfg_port_config; // 0x800
     uint32_t port_cfg_refclk_config; // 0x810
@@ -137,6 +139,7 @@ struct ApplePCIEPort {
     bool gpio_clkreq_val;
     bool skip_reset_clear;
     bool is_link_up;
+    bool is_link_in_l2;
 };
 
 struct ApplePCIEState {

@@ -48,10 +48,12 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandDeviceState, APPLE_BASEBAND_DEVICE)
 #define TYPE_APPLE_BASEBAND "apple.baseband"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandState, APPLE_BASEBAND)
 
-// #define APPLE_BASEBAND_DEVICE_BAR0_SIZE (4 * KiB)
-// #define APPLE_BASEBAND_DEVICE_BAR1_SIZE (4 * KiB)
-#define APPLE_BASEBAND_DEVICE_BAR0_SIZE (16 * MiB)
-#define APPLE_BASEBAND_DEVICE_BAR1_SIZE (16 * MiB)
+// s8000: 0x1000/0x1000 (qualcomm)
+// t8015: 0x1000/0x400 (intel)
+// t8030: ??? (intel)
+// make it 0x8000, just to be sure
+#define APPLE_BASEBAND_DEVICE_BAR0_SIZE (0x8000)
+#define APPLE_BASEBAND_DEVICE_BAR1_SIZE (0x8000)
 
 typedef struct custom_hmap_t {
     uint32_t cap_header;
@@ -112,7 +114,7 @@ struct AppleBasebandState {
     PCIBus *pci_bus;
 };
 
-#if 1
+#if 0
 static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 {
     AppleBasebandState *s = APPLE_BASEBAND(opaque);
@@ -123,6 +125,24 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
     DPRINTF("%s: after first qemu_set_irq: host->irqs[irq_num]: %p ; irq_num: "
             "%d/0x%x ; level: %d\n",
             __func__, s->irq, irq_num, irq_num, level);
+}
+#endif
+
+#if 1
+static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
+{
+    AppleBasebandState *s = APPLE_BASEBAND(opaque);
+    PCIDevice *pci_dev = PCI_DEVICE(s->device);
+#if 1
+    if (msi_enabled(pci_dev)) {
+        if (level) {
+            msi_notify(pci_dev, 0);
+        }
+    } else 
+#endif
+    {
+        pci_set_irq(pci_dev, level);
+    }
 }
 #endif
 
@@ -147,6 +167,7 @@ static void baseband_gpio_set_reset_det(DeviceState *dev, int level)
             s->gpio_reset_det_val, level);
     s->gpio_reset_det_val = level;
     qemu_set_irq(s->gpio_reset_det_irq, level);
+    //apple_baseband_set_irq(s->root, 0, level);
 }
 
 static void apple_baseband_add_pcie_cap_hmap(AppleBasebandDeviceState *s,
@@ -198,6 +219,8 @@ static void apple_baseband_dma_write(AppleBasebandDeviceState *s,
     }
 }
 
+// mmioWriteBar0 addresses bar1, while mmioWriteBar1 addresses bar0
+
 static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
@@ -206,6 +229,18 @@ static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
     switch (addr) {
+    case 0x90: // ICEBBRTIDevice::updateContextAddr
+        break;
+    case 0x94: // ICEBBRTIDevice::updateContextAddr
+        break;
+    case 0x98: // ICEBBRTIDevice::updateWindowBase ; DART window
+        break;
+    case 0x9c: // ICEBBRTIDevice::updateWindowBase ; DART window
+        break;
+    case 0xa0: // ICEBBRTIDevice::updateWindowLimit ; DART window
+        break;
+    case 0xa4: // ICEBBRTIDevice::updateWindowLimit ; DART window
+        break;
     default:
         break;
     }
@@ -257,6 +292,18 @@ static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
                sizeof(custom_baseband0.pad1)); // non-null-terminated
         uint8_t *custom_baseband0_ptr = (uint8_t *)&custom_baseband0;
         val = ldl_le_p(custom_baseband0_ptr + addr - 0x4);
+    case 0x60: // ICEBBRTIDevice::getImageResponse
+        val = 0x0;
+        break;
+    case 0x88: // ICEBBRTIDevice::getImageSize
+        val = 0x0;
+        break;
+    case 0x8c: // ICEBBRTIDevice::getStatus
+        val = 0x1;
+        break;
+    case 0xac: // ICEBBRTIDevice::getCapability
+        val = 0x0;
+        break;
     default:
         break;
     }
@@ -293,13 +340,21 @@ static void apple_baseband_device_bar1_write(void *opaque, hwaddr addr,
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
     switch (addr) {
-    case 0x90:
+    case 0x90: // ICEBBRTIDevice::updateControl
         // bit0
 #if 0
         if ((data & 1) != 0) {
         }
 #endif
+        // bit1 // IOACIPCRTIDevice::initCheck
+#if 0
+        if ((data & 2) != 0) {
+        }
+#endif
         break;
+    case 0xa0: // ICEBBRTIDevice::updateSleepControl
+        break;
+    // case 0x???: // ICEBBRTIDevice::updateExtraDoorbell: addr == base + (index * 0x18) + 0x10
     default:
         break;
     }
@@ -332,6 +387,36 @@ static const MemoryRegionOps bar1_ops = {
             .max_access_size = 4,
         },
 };
+
+static uint32_t apple_baseband_custom_pci_config_read(PCIDevice *d,
+                                                   uint32_t address, int len)
+{
+    AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
+        OBJECT(qdev_get_machine()), "baseband", &error_fatal));
+    AppleBasebandDeviceState *baseband_device = baseband->device;
+    uint32_t val;
+
+    switch (address) {
+    default:
+    jump_default:
+        val = pci_default_read_config(d, address, len);
+        DPRINTF("%s: default: READ DEFAULT @ 0x%x value:"
+                " 0x%x\n",
+                __func__, address, val);
+        if (address == (baseband_device->hmap_hardcoded_offset + 0x6c)) {
+            // read end
+            DPRINTF("%s: read end\n", __func__);
+#if 0
+            baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
+            baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
+#endif
+        }
+        break;
+    }
+
+    DPRINTF("%s: READ @ 0x%x value: 0x%x\n", __func__, address, val);
+    return val;
+}
 
 static uint8_t smc_key_gP07_read(AppleSMCState *s, SMCKey *key,
                                  SMCKeyData *data, void *payload,
@@ -401,16 +486,17 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
         int enable_baseband_power = (value & 1) != 0;
         DPRINTF("%s: setPowerOnBBPMUPinGated/bb_on enable: %d\n", __func__,
                 enable_baseband_power);
-        return kSMCSuccess;
-#if 1
+#if 0
         // the move from pmuexton to here was unnecessary, because this doesn't seem to influence AppleBasebandPlatform::resetDetectInterrupt, and having this at the previous location also leads to further pcie access attempts
         // yet, bb_on seems to be the correct place, since being used at various reset functions
         // still, it doesn't seem to appear to be the actual correct place
         //baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
         //baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
         // 0 means 1 == reset detected ; 1 means 0 == alive
-        baseband_gpio_set_reset_det(DEVICE(baseband_device), enable_baseband_power); // 1 means 0 == alive
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), enable_baseband_power); // 1 means 0 == alive
+        apple_baseband_set_irq(baseband, 0, 1);
 #endif
+        return kSMCSuccess;
     }
     default:
         DPRINTF("%s: UNKNOWN VALUE: 0x%08x\n", __func__, value);
@@ -453,9 +539,9 @@ static uint8_t smc_key_gP09_read(AppleSMCState *s, SMCKey *key,
         DPRINTF("%s: getVectorType\n", __func__);
         // AppleSMCPMU::getVectorType
         // value 0x0/0x1 means vector type "Level", else "Edge"
-        tmpval0 = 0x0;
+        // tmpval0 = 0x0;
         // tmpval0 = 0x1;
-        // tmpval0 = 0x2;
+        tmpval0 = 0x2;
         memcpy(data->data, &tmpval0, sizeof(tmpval0));
         return kSMCSuccess;
     }
@@ -471,6 +557,7 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
 {
     AppleRTKit *rtk;
     uint32_t value;
+    KeyResponse r;
 
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
@@ -497,11 +584,27 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
     case 0x04000000: {
         // disableVectorHard/IENA
         DPRINTF("%s: disableVectorHard\n", __func__);
+        //apple_baseband_set_irq(baseband, 0, 1);
+        //goto enableVector;
         return kSMCSuccess;
     }
     case 0x04000001: {
         // enableVector/IENA
         DPRINTF("%s: enableVector\n", __func__);
+        //apple_baseband_set_irq(baseband, 0, 1);
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), false);
+#if 0
+        enableVector:
+        memset(&r, 0, sizeof(r));
+        r.status = SMC_NOTIFICATION;
+        //r.response[0] = 0x01; // maybe enable afterwards (directly after disabling)
+        r.response[0] = (value & 1); // maybe enable afterwards (directly after disabling)
+        // r.response[1] = 0x15; // t8015: gP15 ; match with function name
+        r.response[1] = 0x09; // for type 2: vectorNumber-7 probably t8030: gP09 ; match with function name
+        r.response[2] = 0x02; // type: 1==lid state? 2==vectorState? 3==hid buttons?
+        r.response[3] = 0x72;
+        apple_rtkit_send_user_msg(rtk, kSMCKeyEndpoint, r.raw);
+#endif
         return kSMCSuccess;
     }
     // function-pmu_exton_config: 0x07000000/0x07000001 write?
@@ -509,11 +612,25 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
     // case 0x0700dead:
     case 0x07000001: {
         // AppleBasebandPlatform::pmuExtOnConfigGated
-        // bit0 == use_pmuExtOnConfigOverride_enabled == maybe enable baseband
+        // // bit0 == use_pmuExtOnConfigOverride_enabled == maybe enable baseband
         // bit0 == pull-down enabled
-        int use_pmuExtOnConfigOverride_enabled = (value & 1) != 0;
+        int use_pmuExtOnConfigOverride_pulldown = (value & 1) != 0;
         DPRINTF("%s: pmuExtOnConfigGated/pmu_exton_config enable: %d\n",
-                __func__, use_pmuExtOnConfigOverride_enabled);
+                __func__, use_pmuExtOnConfigOverride_pulldown);
+        if (!use_pmuExtOnConfigOverride_pulldown) {
+            DPRINTF("%s: ignoring pmuExtOnConfigGated/pmu_exton_config enable:"
+                    " %d\n",
+                    __func__, use_pmuExtOnConfigOverride_pulldown);
+            // DPRINTF("%s: set false pmuExtOnConfigGated/pmu_exton_config enable:"
+            //         " %d\n",
+            //         __func__, use_pmuExtOnConfigOverride_pulldown);
+            // baseband_gpio_set_reset_det(DEVICE(baseband_device), false);
+            // DPRINTF("%s: set true pmuExtOnConfigGated/pmu_exton_config enable:"
+            //         " %d\n",
+            //         __func__, use_pmuExtOnConfigOverride_pulldown);
+            // baseband_gpio_set_reset_det(DEVICE(baseband_device), true);
+            return kSMCSuccess;
+        }
 #if 0
         AppleSPMIBasebandState *baseband_spmi = APPLE_SPMI_BASEBAND(object_property_get_link(OBJECT(qdev_get_machine()), "baseband-spmi", &error_fatal));
         g_assert_nonnull(baseband_spmi);
@@ -522,12 +639,32 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
         // having this at this position influences AppleBasebandPlatform::resetDetectInterrupt
         // this seem to lead to further pcie access attempts, five minutes after boot
         // whoops, that was actually just readTimeCounter/readEntriesCounter
-        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
-        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected ; getModemResetGated() must return 0x1
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive ; getModemResetGated() must return 0x0
         // 0 means 1 == reset detected ; 1 means 0 == alive
-        //baseband_gpio_set_reset_det(DEVICE(baseband_device), use_pmuExtOnConfigOverride_enabled); // 1 means 0 == alive
-        baseband_gpio_set_reset_det(DEVICE(baseband_device), !use_pmuExtOnConfigOverride_enabled); // 1 means 0 == alive
+        // edge/flip-flip is needed here for the interrupt ; is it actually needed?
+        // pulldown == 0 == reset then alive
+        // pulldown == 1 == alive then reset
+        // use_pmuExtOnConfigOverride_pulldown == alive then reset, but should be the other way around
+        // use_pmuExtOnConfigOverride_pulldown then !use_pmuExtOnConfigOverride_pulldown is reset
+        baseband_gpio_set_reset_det(DEVICE(baseband_device), use_pmuExtOnConfigOverride_pulldown);
+        baseband_gpio_set_reset_det(DEVICE(baseband_device), !use_pmuExtOnConfigOverride_pulldown);
 #endif
+#if 0
+        // this might lead to "reset detected" ; ... or not
+        memset(&r, 0, sizeof(r));
+        r.status = SMC_NOTIFICATION;
+        r.response[0] = use_pmuExtOnConfigOverride_pulldown;
+        //r.response[0] = !use_pmuExtOnConfigOverride_pulldown;
+        //r.response[0] = 0x01; // maybe enable afterwards (directly after disabling)
+        // r.response[1] = 0x15; // t8015: gP15 ; match with function name
+        r.response[1] = 0x09; // for type 2: vectorNumber-7 probably t8030: gP09 ; match with function name
+        r.response[2] = 0x02; // type: 1==lid state? 2==vectorState? 3==hid buttons?
+        r.response[3] = 0x72;
+        apple_rtkit_send_user_msg(rtk, kSMCKeyEndpoint, r.raw);
+        return kSMCSuccess;
+#endif
+        //apple_baseband_set_irq(baseband, 0, 1);
         return kSMCSuccess;
     }
     default:
@@ -628,7 +765,7 @@ SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
 #endif
 
 #if 1
-    sysbus_init_irq(sbd, &s->irq);
+    //sysbus_init_irq(sbd, &s->irq);
     // qdev_init_gpio_in_named(dev, apple_baseband_set_irq, "interrupt_pci", 1);
 #endif
 
@@ -669,7 +806,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     uint8_t *pci_conf = dev->config;
     int ret, i;
 
-    ////pci_conf[PCI_INTERRUPT_PIN] = 1;
+    pci_conf[PCI_INTERRUPT_PIN] = 1;
     // wifi and bluetoth seem to have those ids, but not baseband
     pci_set_word(pci_conf + PCI_SUBSYSTEM_VENDOR_ID, 0);
     pci_set_word(pci_conf + PCI_SUBSYSTEM_ID, 0);
@@ -688,17 +825,21 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     msi_nonbroken = true;
     msi_init(dev, 0x50, 1, true, false, &error_fatal);
     pci_pm_init(dev, 0x40, &error_fatal);
+#if 1
     // warning: this will override the settings of the ports as well.
-    // for S8000
+    // for T8030
     if (s->port->maximum_link_speed == 2) {
-        pcie_cap_fill_link_ep_usp(dev, QEMU_PCI_EXP_LNK_X2,
+        // S8000's baseband actually seems to have 1, not 2. s3e has 2.
+        pcie_cap_fill_link_ep_usp(dev, QEMU_PCI_EXP_LNK_X1,
                                   QEMU_PCI_EXP_LNK_8GT);
     }
-    // for T8030
+    // for S8000/T8015(?)
     if (s->port->maximum_link_speed == 1) {
+        // might also need to be X1 instead of X2
         pcie_cap_fill_link_ep_usp(dev, QEMU_PCI_EXP_LNK_X2,
                                   QEMU_PCI_EXP_LNK_5GT);
     }
+#endif
     // sizes: 0x50 for the bridges and qualcomm baseband,
     // 0x3c for broadcom wifi, 0x48 for nvme
     // versions: 1 for broadcom wifi, 2 for the rest
@@ -706,9 +847,15 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     // pcie_aer_init(dev, PCI_ERR_VER, 0x100, 0x50, &error_fatal);
     pcie_aer_init(dev, PCI_ERR_VER, 0x100, PCI_ERR_SIZEOF, &error_fatal);
 
-    // TODO: under S8000, bar0/bar2 have the same address/size and are 64-bit
+    // TODO: under S8000/T8015, bar0/bar2 are 64-bit, but t8030 doesn't seem to like that
+#if 0
+    pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64, &s->bar0);
+    pci_register_bar(dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64, &s->bar1);
+#endif
+#if 1
     pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar0);
     pci_register_bar(dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar1);
+#endif
 #define BASEBAND_BAR_SUB_ADDR 0x40000000ULL
     memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
                        APPLE_BASEBAND_DEVICE_BAR0_SIZE +
@@ -741,13 +888,16 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     // apple_baseband_add_pcie_cap_l1ss(s, dev);
     s->gpio_coredump_val = 0;
     s->gpio_reset_det_val = 0;
-    baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
-    //baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
+    //baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
+    baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
 
-    // s->boot_stage = 0xfeedb007; // rom stage is legacy
-    // s->boot_stage = 0xffffffff; // failed to read execution environment
-    s->boot_stage = 0x0;
-    // s->boot_stage = 0x2; // this stage will skip HMAP
+    //s->boot_stage = 0xfeedb007; // rom stage is legacy
+    //s->boot_stage = 0xffffffff; // failed to read execution environment
+    //s->boot_stage = 0x0;
+    s->boot_stage = 0x2; // this stage will skip HMAP, but progresses further
+    //s->boot_stage = 0xfeedbeef;
+    //s->boot_stage = 0x600df00d;
+    //s->boot_stage = 0x1;
 
     // TODO: pcie_cap_slot_reset can and will silently revert
     // set_power/set_enable when it's being done here
@@ -780,6 +930,7 @@ static void apple_baseband_device_class_init(ObjectClass *class, void *data)
     c->device_id = 0x7660; // t8030
     c->revision = 0x01; // t8015 && t8030?
     c->class_id = 0x0d40; // t8015 && t8030
+    //c->config_read = apple_baseband_custom_pci_config_read;
 
     rc->phases.hold = apple_baseband_device_qdev_reset_hold;
 
@@ -798,8 +949,8 @@ static void apple_baseband_realize(DeviceState *dev, Error **errp)
     PCIDevice *pci_dev = PCI_DEVICE(s->device);
     qdev_realize(DEVICE(s->device), BUS(s->pci_bus), &error_fatal);
 
-    qdev_init_gpio_in_named(DEVICE(s), apple_baseband_set_irq, "interrupt_pci",
-                            1);
+    // qdev_init_gpio_in_named(DEVICE(s), apple_baseband_set_irq, "interrupt_pci",
+    //                         1);
     qdev_init_gpio_in_named(DEVICE(s), baseband_gpio_coredump,
                             BASEBAND_GPIO_COREDUMP, 1);
     qdev_init_gpio_out_named(DEVICE(s), &s_device->gpio_reset_det_irq,

@@ -91,6 +91,8 @@ enum SMCSystemStateNotifyType {
     kSMCSystemStateNotifySMCPanicProgress = 0x22,
 };
 
+#define kSMCKeyEndpoint 0
+
 enum SMCAttr {
     SMC_ATTR_LITTLE_ENDIAN = BIT(2),
     SMC_ATTR_FUNCTION = BIT(4),
@@ -107,6 +109,19 @@ typedef uint8_t (*KeyReader)(AppleSMCState *s, SMCKey *key, SMCKeyData *data,
                              void *payload, uint8_t length);
 typedef uint8_t (*KeyWriter)(AppleSMCState *s, SMCKey *key, SMCKeyData *data,
                              void *payload, uint8_t length);
+
+typedef struct {
+    union {
+        struct {
+            uint8_t status;
+            uint8_t tag_and_id;
+            uint8_t length;
+            uint8_t unk3;
+            uint8_t response[4];
+        };
+        uint64_t raw;
+    };
+} QEMU_PACKED KeyResponse;
 
 typedef struct {
     uint8_t size;

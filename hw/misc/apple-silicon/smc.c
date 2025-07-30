@@ -11,8 +11,6 @@
 #include "qemu/queue.h"
 #include "system/runstate.h"
 
-#define kSMCKeyEndpoint 0
-
 typedef struct {
     uint8_t cmd;
     uint8_t tag_and_id;
@@ -20,19 +18,6 @@ typedef struct {
     uint8_t payload_length;
     uint32_t key;
 } QEMU_PACKED KeyMessage;
-
-typedef struct {
-    union {
-        struct {
-            uint8_t status;
-            uint8_t tag_and_id;
-            uint8_t length;
-            uint8_t unk3;
-            uint8_t response[4];
-        };
-        uint64_t raw;
-    };
-} QEMU_PACKED KeyResponse;
 
 struct AppleSMCClass {
     AppleRTKitClass parent_class;

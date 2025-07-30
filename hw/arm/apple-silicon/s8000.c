@@ -855,10 +855,12 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     sysbus_connect_irq(nvme, 0,
                        qdev_get_gpio_in(DEVICE(s8000_machine->aic), ints[0]));
 
+#if 0
     uint32_t bridge_index = 0;
     qdev_connect_gpio_out_named(
         DEVICE(apcie_host), "interrupt_pci", bridge_index,
         qdev_get_gpio_in_named(DEVICE(nvme), "interrupt_pci", 0));
+#endif
 
     AppleDARTState *dart = APPLE_DART(object_property_get_link(
         OBJECT(s8000_machine), "dart-apcie0", &error_fatal));

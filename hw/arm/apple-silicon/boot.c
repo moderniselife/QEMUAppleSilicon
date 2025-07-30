@@ -215,8 +215,13 @@ static const char *REM_PROPS[] = {
     "pearl-camera",
     "face-detection-support",
     "siri-gesture",
+#if 0
     "pci-l1pm-control", // TODO?
     "pci-aspm-default",
+    "manual-enable-s2r",
+    "pci-l1pm-control-postrom",
+    "pci-l1pm-control-a0",
+#endif
 };
 
 static void *srawmemchr(void *str, int chr)

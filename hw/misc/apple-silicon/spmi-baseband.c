@@ -5,7 +5,10 @@
 #include "migration/vmstate.h"
 #include "qemu/module.h"
 
-// AppleBasebandI19::spmiTimerCallback says that the only thing being written/read is offset 0x147/value 0x2f
+// AppleBasebandI19::spmiTimerCallback says that the only thing being
+// written/read is offset 0x147/value 0x2f
+// commands being used are: SPMI_CMD_EXT_WRITEL/SPMI_CMD_EXT_READL
+
 
 #define DEBUG_SPMI_BASEBAND
 
@@ -39,6 +42,13 @@ static int apple_spmi_baseband_send(SPMISlave *s, uint8_t *data, uint8_t len)
 
     for (addr = p->addr; addr < p->addr + len; addr++) {
         p->reg[addr] = data[addr - p->addr];
+    }
+    if (p->addr == 0x147 && p->reg[p->addr] == 0x2f) {
+        DPRINTF("%s: addr 0x%x valid\n", __func__, p->addr);
+        // is this interrupt actually affecting anything?
+        //apple_spmi_baseband_set_irq(p, 1);
+    } else {
+        DPRINTF("%s: addr 0x%x INVALID\n", __func__, p->addr);
     }
     p->addr = addr;
     return len;

@@ -103,6 +103,13 @@ static void apcie_port_gpio_perst(void *opaque, int n, int level)
     port->gpio_perst_val = val;
 }
 
+static int apple_pcie_map_irq(PCIDevice *pci_dev, int irq_num)
+{
+    /* Check that out properly ... */
+    //return 0;
+    return irq_num & 3;
+}
+
 static void apple_pcie_set_irq(void *opaque, int irq_num, int level)
 {
     ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
@@ -115,6 +122,11 @@ static void apple_pcie_set_own_irq(ApplePCIEPort *port, int level)
     ApplePCIEHost *host = port->host;
     int irq_num = port->bus_nr;
 
+    // handling this otherwise might trigger interrupts on unmask
+    port->port_last_interrupt &= ~port->port_interrupt_mask;
+
+    if (level && !port->port_last_interrupt)
+        return;
     qemu_set_irq(host->irqs[irq_num], level);
 }
 
@@ -160,11 +172,16 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
 
     int msi_intr_index = 0;
 
+#if 0
     port->msi.intr[msi_intr_index].status |=
         BIT(data) & port->msi.intr[msi_intr_index].enable;
 
     if (port->msi.intr[msi_intr_index].status &
         ~port->msi.intr[msi_intr_index].mask) {
+#endif
+    uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
+    // status might be msi_intr_index
+    if (status) {
         // qemu_set_irq(port->msi_irqs[msi_intr_index], 1);
         qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
         // qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index + 1], 1);
@@ -795,10 +812,8 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
         val = port->port_ltssm_enable;
         break;
     case 0x8c:
-        // write requestPMEToBroadcast value 0x11
-        // read receivedPMEToAck value/pmeto full value and bit0
-        // break;
-        goto jump_default;
+        val = port->port_pme_to_ack;
+        break;
     case 0x100: // pcielint/getPortInterrupts
         // val = 0xdeadbeef;
         // val |= 0x10 maybe some vector
@@ -816,19 +831,18 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
         //  hex(0x1000|0x4000|0x8000|0x20000|0x40000|0x80000|0x200000|0x800000|0x2000000|0x4000000)
         //  == 0x6aed000 enableInterrupts doesn't clear completer-abort
         //  interrupt
-        // val = port->port_last_interrupt;
+        val = port->port_last_interrupt;
         //  Don't reset/clear the value here, iOS will do that!
         ////port->port_last_interrupt = 0;
-        val = port->msi.intr[msi_intr_index].status;
+        // val = port->msi.intr[msi_intr_index].status;
         // // HACK ORing
         // val |= port->port_last_interrupt;
         break;
-    case 0x104: // AppleT803xPCIePort::disableAERInterrupts
-        // val = 0;
-        val = port->msi.intr[msi_intr_index].mask;
+    case 0x104: // read in AppleT803xPCIePort::disableAERInterrupts, written back via enableInterrupts
+        val = port->port_interrupt_mask;
         break;
     case 0x108: // AppleT803xPCIePort::disableAERInterrupts
-        val = port->msi.intr[msi_intr_index].enable;
+        // TODO
         break;
     case APPLE_PCIE_MSI_ADDR_LO: // msi addr low
         val = port->msi.base;
@@ -840,6 +854,7 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
         ////val = port->msi.intr[msi_intr_index].enable;
         val = port->port_msiVectors;
         break;
+    // TODO: what/where is msi.status, does it even exist?
     case 0x128: // msi unknown
         val = port->port_msiUnknown0;
         // val0 = ((val >> 0) & 0xffff) / 0x8
@@ -848,24 +863,8 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
     case 0x13c:
         val = port->port_hotreset;
         break;
-    // case DESIGNWARE_PCIE_MSI_INTR0_MASK:
-    //     val = port->msi.intr[msi_intr_index].mask;
-    //     break;
-    // case DESIGNWARE_PCIE_MSI_INTR0_STATUS:
-    //     val = port->msi.intr[msi_intr_index].status;
-    //     break;
     case 0x88: // S800x linksts
     case 0x208: // T8030 linksts ; for getLinkUp/isLinkInL2.
-        // I've no idea what I should return for bit6
-        // bit6 might need to be set for waitForL2Entry/disableGated
-        // TODO: maybe only set bit6 on link-down
-        // TODO: check the condition for bit0 being returned
-        ////val = (1 << 0); // getLinkUp
-        // bool is_port_really_enabled = is_port_enabled &&
-        // PCI_DEVICE(port)->enabled; val = (is_port_really_enabled << 0); //
-        // getLinkUp val = (is_port_enabled << 0); // getLinkUp
-        ////val |= (0 << 6); // isLinkInL2
-        // val |= (1 << 6); // isLinkInL2
         if (addr == 0x88 && (port->host->pcie->chip_id == 0x8000 || port->host->pcie->chip_id == 0x8003)) {
             port->is_link_up = (port->port_ltssm_enable & 1) != 0;
             DPRINTF("%s: Port %u: S800x linksts: is_link_up: %d\n",
@@ -876,14 +875,8 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
                     __func__, port->bus_nr, port->is_link_up);
         }
         val = (port->is_link_up << 0); // getLinkUp
-        ////val |= 0x8040000c;
-#if 0
-        if (is_port_enabled) {
-            port->is_link_up = true;
-        }
-#endif
-        ////port->is_link_up = is_port_enabled; // maybe use this for
-        /// disableGated checks caused by timeout inside handleTimer
+        // not sure why real s8000 and t8015 continuously fail to enter L2
+        val |= (port->is_link_in_l2 << 6); // isLinkInL2
         break;
     case 0x210: // linkcdmsts
         val = port->port_linkcdmsts;
@@ -958,18 +951,25 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
                 port_devices_set_power(port, true);
             }
             // TODO: handle link-down and other interrupts as well.
-            port->msi.intr[msi_intr_index].status |=
-                0x1000; // link-up interrupt
+#if 0
+            // link-up interrupt
+            port->msi.intr[msi_intr_index].status |= 0x1000;
+#endif
+            port->port_last_interrupt |= 0x1000;
             apple_pcie_set_own_irq(port, 1);
         }
         break;
     case 0x8c:
-        // write requestPMEToBroadcast value 0x11
+        // t8030: write requestPMEToBroadcast value 0x11
+        // s8000: write requestPMEToBroadcast value 0x31
         // read receivedPMEToAck value/pmeto full value and bit0
-        // break;
-        goto jump_default;
+        // possible expected return value 0x10
+        port->port_pme_to_ack = data;
+        port->port_pme_to_ack &= ~(0x20 | 0x1);
+        break;
     case 0x100: // pcielint? ; and enableInterrupts?
                 // clearLinkUpInterrupt/clearPortInterrupts
+#if 0
         DPRINTF("%s: reg==0x100: Port %u: previous_msi_status: 0x%x\n",
                 __func__, port->bus_nr, port->msi.intr[msi_intr_index].status);
         port->msi.intr[msi_intr_index].status &= ~data; // not xor
@@ -979,15 +979,25 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
             apple_pcie_set_own_irq(port, 0);
             // qemu_set_irq(port->msi_irqs[msi_intr_index], 0);
         }
+#endif
+#if 1
+        DPRINTF("%s: reg==0x100: Port %u: previous_port_last_interrupt: 0x%x\n",
+                __func__, port->bus_nr, port->port_last_interrupt);
+        port->port_last_interrupt &= ~data; // not xor
+        DPRINTF("%s: reg==0x100: Port %u: current_port_last_interrupt: 0x%x\n",
+                __func__, port->bus_nr, port->port_last_interrupt);
+        if (!port->port_last_interrupt) {
+            apple_pcie_set_own_irq(port, 0);
+            // qemu_set_irq(port->msi_irqs[msi_intr_index], 0);
+        }
+#endif
         break;
     case 0x104: // disableVectorHard/enableInterrupts/enableVector
-        // disableVectors = (data & 0xf0) >> 4;
-        port->msi.intr[msi_intr_index].mask = data;
-        apple_pcie_port_update_msi_mapping(port);
+        // (0xf << 4) == AER interrupts;
+        port->port_interrupt_mask = data;
         break;
     case 0x108: // disableAERInterrupts
-        port->msi.intr[msi_intr_index].enable = data;
-        apple_pcie_port_update_msi_mapping(port);
+        // TODO
         break;
     case 0x128: // msi unknown
         // 0x0000000000180018
@@ -1015,6 +1025,13 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
             port->port_last_interrupt |= 0x4000; // link-down interrupt
         }
         if (port->port_last_interrupt) {
+            apple_pcie_set_own_irq(port, 1);
+        }
+#endif
+#if 1
+        if ((data & 0x100) != 0) {
+            // return 0x4000 at offset 0x100
+            port->port_last_interrupt |= 0x4000; // link-down interrupt
             apple_pcie_set_own_irq(port, 1);
         }
 #endif
@@ -1064,7 +1081,7 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
         // 32 == 0x51 ; 16 == 0x41 ; 8 == 0x31 ; 4 == 0x21 ; 2 == 0x11 ; 1 ==
         // 0x1 ; 0 == 0x0
         port->port_msiVectors = data;
-#if 0
+#if 1
         uint32_t enable = (data & 1) != 0;
         uint32_t vectors = 1 << ((data & 0xf0) >> 4);
         if (enable) {
@@ -1507,6 +1524,27 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
                                 "function-dart_self"),
                                 DART_DART_SELF);
 #endif
+#if 1
+        // dtb_remove_prop_named(child, "function-dart_force_active");
+        // dtb_remove_prop_named(child, "function-dart_request_sid");
+        // dtb_remove_prop_named(child, "function-dart_release_sid");
+        // dtb_remove_prop_named(child, "function-dart_self");
+#if 0
+        dtb_remove_prop_named(child, "pci-l1pm-control");
+        dtb_remove_prop_named(child, "manual-enable-s2r");
+        dtb_remove_prop_named(child, "pci-aspm-default");
+        dtb_remove_prop_named(child, "pci-l1pm-control-postrom");
+        dtb_remove_prop_named(child, "pci-l1pm-control-a0");
+        //dtb_remove_prop_named(child, "");
+#endif
+#if 0
+        dtb_set_prop_null(child, "pci-wake-l1pm-disable");
+        child = dtb_get_node(child, "baseband-pcie");
+        if (child != NULL) {
+            dtb_set_prop_null(child, "pci-wake-l1pm-disable");
+        }
+#endif
+#endif
 #endif
     } else {
         port->dma_mr = NULL;
@@ -1529,14 +1567,24 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         qdev_prop_set_enum(DEVICE(port), "x-speed", PCIE_LINK_SPEED_8);
         qdev_prop_set_enum(DEVICE(port), "x-width", PCIE_LINK_WIDTH_1);
     }
-    // for T8030
+    // for T8030 (and S800x)
     else if (port->maximum_link_speed == 2) {
         // qdev_prop_set_enum(DEVICE(port), "x-speed", PCIE_LINK_SPEED_5);
         //  set speed to 8GT here, so qemu will start writing to PCI_EXP_LNKCAP2
         //  the actual device can/will/should set it to the proper value
         qdev_prop_set_enum(DEVICE(port), "x-speed", PCIE_LINK_SPEED_8);
-        qdev_prop_set_enum(DEVICE(port), "x-width", PCIE_LINK_WIDTH_1);
+        qdev_prop_set_enum(DEVICE(port), "x-width", PCIE_LINK_WIDTH_2);
     }
+#if 0
+    // TODO: for T8010
+    else if (port->maximum_link_speed == 3) {
+        // qdev_prop_set_enum(DEVICE(port), "x-speed", PCIE_LINK_SPEED_5);
+        //  set speed to 8GT here, so qemu will start writing to PCI_EXP_LNKCAP2
+        //  the actual device can/will/should set it to the proper value
+        qdev_prop_set_enum(DEVICE(port), "x-speed", PCIE_LINK_SPEED_8);
+        qdev_prop_set_enum(DEVICE(port), "x-width", PCIE_LINK_WIDTH_2);
+    }
+#endif
 #endif
 
     // qdev_realize(DEVICE(dev), NULL, &error_abort);
@@ -1735,7 +1783,9 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
         }
         bool is_port_enabled = (port->port_cfg_port_config & 1) != 0;
         port->port_ltssm_enable = 0x0;
+        port->port_pme_to_ack = 0x0;
         port->port_last_interrupt = 0x0;
+        port->port_interrupt_mask = 0x0;
         port->port_hotreset = 0x0;
         port->port_cfg_port_config = 0x0;
         port->port_cfg_refclk_config = 0x0;
@@ -1758,6 +1808,7 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
     }
     port->skip_reset_clear = false;
     port->is_link_up = false;
+    port->is_link_in_l2 = false;
 }
 
 static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
@@ -1996,9 +2047,16 @@ static void apple_pcie_host_realize(DeviceState *dev, Error **errp)
     /* interrupt out */
     qdev_init_gpio_out_named(dev, s->irqs, "interrupt_pci", 4);
 
+#if 1
     pci->bus = pci_register_root_bus(dev, "apcie", apple_pcie_set_irq,
                                      pci_swizzle_map_irq_fn, s, &s->mmio,
                                      &s->io, 0, 4, TYPE_APPLE_PCIE_ROOT_BUS);
+#endif
+#if 0
+    pci->bus = pci_register_root_bus(dev, "apcie", apple_pcie_set_irq,
+                                     apple_pcie_map_irq, s, &s->mmio,
+                                     &s->io, 0, 4, TYPE_APPLE_PCIE_ROOT_BUS);
+#endif
     // pci->bus->flags |= PCI_BUS_EXTENDED_CONFIG_SPACE;
 }
 

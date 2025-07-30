@@ -21,6 +21,7 @@
 #include "qemu/osdep.h"
 #include "hw/block/apple_nvme_mmu.h"
 #include "hw/irq.h"
+#include "hw/pci-host/apcie.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/pci_device.h"
 #include "hw/sysbus.h"
@@ -152,7 +153,20 @@ static const MemoryRegionOps apple_nvme_mmu_common_reg_ops = {
 static void apple_nvme_mmu_set_irq(void *opaque, int irq_num, int level)
 {
     AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
-    qemu_set_irq(s->irq, level);
+    //qemu_set_irq(s->irq, level);
+    //return;
+
+    PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
+#if 0
+    if (msi_enabled(pci_dev)) {
+        if (level) {
+            msi_notify(pci_dev, 0);
+        }
+    } else
+#endif
+    {
+        pci_set_irq(pci_dev, level);
+    }
 }
 
 static void apple_nvme_mmu_start(AppleNVMeMMUState *s)
@@ -212,6 +226,8 @@ SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus)
 static void apple_nvme_mmu_realize(DeviceState *dev, Error **errp)
 {
     AppleNVMeMMUState *s = APPLE_NVME_MMU(dev);
+    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
+        OBJECT(qdev_get_machine()), "pcie.bridge0", &error_fatal));
 
     PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
     qdev_realize(DEVICE(s->nvme), BUS(s->pci_bus), &error_fatal);
@@ -226,8 +242,23 @@ static void apple_nvme_mmu_realize(DeviceState *dev, Error **errp)
     //msi_init(pci_dev, 0, 8, true, false, &error_fatal);
 
     pci_pm_init(pci_dev, 0, &error_fatal);
-    // pcie_cap_fill_link_ep_usp(pci_dev, QEMU_PCI_EXP_LNK_X2,
-    //                           QEMU_PCI_EXP_LNK_8GT);
+    // maximum-link-speed is 2 for s8000 and 3 for t8010
+#if 1
+    // warning: this will override the settings of the ports as well.
+    // for S8000
+    if (port->maximum_link_speed == 2) {
+        // S8000's baseband actually seems to have 1, not 2. s3e has 2.
+        pcie_cap_fill_link_ep_usp(pci_dev, QEMU_PCI_EXP_LNK_X2,
+                                  QEMU_PCI_EXP_LNK_5GT);
+    }
+#if 0
+    // TODO?: for T8010
+    if (port->maximum_link_speed == 3) {
+        pcie_cap_fill_link_ep_usp(pci_dev, QEMU_PCI_EXP_LNK_X2,
+                                  QEMU_PCI_EXP_LNK_8GT);
+    }
+#endif
+#endif
     pcie_aer_init(pci_dev, PCI_ERR_VER, 0x100, PCI_ERR_SIZEOF, &error_fatal);
     pci_config_set_class(pci_dev->config, PCI_CLASS_STORAGE_OTHER);
     apple_nvme_mmu_start(s);
