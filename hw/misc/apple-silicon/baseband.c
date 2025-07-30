@@ -30,7 +30,7 @@
 #include "qemu/log.h"
 #include "qemu/units.h"
 
-// #define DEBUG_BASEBAND
+#define DEBUG_BASEBAND
 #ifdef DEBUG_BASEBAND
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
@@ -140,20 +140,6 @@ static void baseband_gpio_coredump(void *opaque, int n, int level)
     s_device->gpio_coredump_val = coredump;
 }
 
-static void baseband_gpio_reset_det(void *opaque, int n, int level)
-{
-    AppleBasebandState *s = APPLE_BASEBAND(opaque);
-    AppleBasebandDeviceState *s_device = s->device;
-    bool coredump = !!level;
-    assert(n == 0);
-    DPRINTF("%s: iOS set_val: old: %d ; new %d\n", __func__,
-            s_device->gpio_reset_det_val, coredump);
-    if (s_device->gpio_reset_det_val != coredump) {
-        //
-    }
-    s_device->gpio_reset_det_val = coredump;
-}
-
 static void baseband_gpio_set_reset_det(DeviceState *dev, int level)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(dev);
@@ -252,7 +238,7 @@ static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
     case 0x0: // boot stage
         val = s->boot_stage;
         // baseband_gpio_set_reset_det(DEVICE(s), 0);
-        baseband_gpio_set_reset_det(DEVICE(s), 1);
+        // baseband_gpio_set_reset_det(DEVICE(s), 1);
         break;
     case 0x4 ... 0x3c:
         custom_baseband0.unkn0 = 0xdead;
@@ -388,6 +374,7 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
 
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
+    AppleBasebandDeviceState *baseband_device = baseband->device;
     ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
         OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
     ApplePCIEHost *host = port->host;
@@ -415,6 +402,15 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
         DPRINTF("%s: setPowerOnBBPMUPinGated/bb_on enable: %d\n", __func__,
                 enable_baseband_power);
         return kSMCSuccess;
+#if 1
+        // the move from pmuexton to here was unnecessary, because this doesn't seem to influence AppleBasebandPlatform::resetDetectInterrupt, and having this at the previous location also leads to further pcie access attempts
+        // yet, bb_on seems to be the correct place, since being used at various reset functions
+        // still, it doesn't seem to appear to be the actual correct place
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
+        // 0 means 1 == reset detected ; 1 means 0 == alive
+        baseband_gpio_set_reset_det(DEVICE(baseband_device), enable_baseband_power); // 1 means 0 == alive
+#endif
     }
     default:
         DPRINTF("%s: UNKNOWN VALUE: 0x%08x\n", __func__, value);
@@ -457,8 +453,8 @@ static uint8_t smc_key_gP09_read(AppleSMCState *s, SMCKey *key,
         DPRINTF("%s: getVectorType\n", __func__);
         // AppleSMCPMU::getVectorType
         // value 0x0/0x1 means vector type "Level", else "Edge"
-        // tmpval0 = 0x0;
-        tmpval0 = 0x1;
+        tmpval0 = 0x0;
+        // tmpval0 = 0x1;
         // tmpval0 = 0x2;
         memcpy(data->data, &tmpval0, sizeof(tmpval0));
         return kSMCSuccess;
@@ -478,6 +474,7 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
 
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
+    AppleBasebandDeviceState *baseband_device = baseband->device;
     ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
         OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
     ApplePCIEHost *host = port->host;
@@ -518,8 +515,18 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
         DPRINTF("%s: pmuExtOnConfigGated/pmu_exton_config enable: %d\n",
                 __func__, use_pmuExtOnConfigOverride_enabled);
 #if 0
-    AppleSPMIBasebandState *baseband_spmi = APPLE_SPMI_BASEBAND(object_property_get_link(OBJECT(qdev_get_machine()), "baseband-spmi", &error_fatal));
-    g_assert_nonnull(baseband_spmi);
+        AppleSPMIBasebandState *baseband_spmi = APPLE_SPMI_BASEBAND(object_property_get_link(OBJECT(qdev_get_machine()), "baseband-spmi", &error_fatal));
+        g_assert_nonnull(baseband_spmi);
+#endif
+#if 0
+        // having this at this position influences AppleBasebandPlatform::resetDetectInterrupt
+        // this seem to lead to further pcie access attempts, five minutes after boot
+        // whoops, that was actually just readTimeCounter/readEntriesCounter
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
+        // 0 means 1 == reset detected ; 1 means 0 == alive
+        //baseband_gpio_set_reset_det(DEVICE(baseband_device), use_pmuExtOnConfigOverride_enabled); // 1 means 0 == alive
+        baseband_gpio_set_reset_det(DEVICE(baseband_device), !use_pmuExtOnConfigOverride_enabled); // 1 means 0 == alive
 #endif
         return kSMCSuccess;
     }
@@ -662,6 +669,8 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     uint8_t *pci_conf = dev->config;
     int ret, i;
 
+    ////pci_conf[PCI_INTERRUPT_PIN] = 1;
+    // wifi and bluetoth seem to have those ids, but not baseband
     pci_set_word(pci_conf + PCI_SUBSYSTEM_VENDOR_ID, 0);
     pci_set_word(pci_conf + PCI_SUBSYSTEM_ID, 0);
 
@@ -732,7 +741,8 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     // apple_baseband_add_pcie_cap_l1ss(s, dev);
     s->gpio_coredump_val = 0;
     s->gpio_reset_det_val = 0;
-    baseband_gpio_set_reset_det(DEVICE(s), 0);
+    baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
+    //baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
 
     // s->boot_stage = 0xfeedb007; // rom stage is legacy
     // s->boot_stage = 0xffffffff; // failed to read execution environment
@@ -762,10 +772,14 @@ static void apple_baseband_device_class_init(ObjectClass *class, void *data)
 
     c->realize = apple_baseband_device_pci_realize;
     c->exit = apple_baseband_device_pci_uninit;
-    c->vendor_id = 0x17cb;
-    c->device_id = 0x0300;
-    c->revision = 0x00;
-    c->class_id = PCI_CLASS_OTHERS;
+    // changed the values from s8000 to t8015
+    // and from t8015 to what the internet says might be t8030
+    c->vendor_id = PCI_VENDOR_ID_INTEL; // t8015 && t8030
+    // it appears that the intel x-gold product id's are just model number plus 0.
+    //c->device_id = 0x7480; // t8015
+    c->device_id = 0x7660; // t8030
+    c->revision = 0x01; // t8015 && t8030?
+    c->class_id = 0x0d40; // t8015 && t8030
 
     rc->phases.hold = apple_baseband_device_qdev_reset_hold;
 
@@ -788,8 +802,6 @@ static void apple_baseband_realize(DeviceState *dev, Error **errp)
                             1);
     qdev_init_gpio_in_named(DEVICE(s), baseband_gpio_coredump,
                             BASEBAND_GPIO_COREDUMP, 1);
-    qdev_init_gpio_in_named(DEVICE(s), baseband_gpio_reset_det,
-                            BASEBAND_GPIO_RESET_DET_IN, 1);
     qdev_init_gpio_out_named(DEVICE(s), &s_device->gpio_reset_det_irq,
                              BASEBAND_GPIO_RESET_DET_OUT, 1);
 }

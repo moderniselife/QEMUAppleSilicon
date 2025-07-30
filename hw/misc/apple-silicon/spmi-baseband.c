@@ -5,6 +5,8 @@
 #include "migration/vmstate.h"
 #include "qemu/module.h"
 
+// AppleBasebandI19::spmiTimerCallback says that the only thing being written/read is offset 0x147/value 0x2f
+
 #define DEBUG_SPMI_BASEBAND
 
 #ifdef DEBUG_SPMI_BASEBAND

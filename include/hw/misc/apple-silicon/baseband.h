@@ -26,8 +26,6 @@
 #include "hw/sysbus.h"
 
 #define BASEBAND_GPIO_COREDUMP "baseband-gpio-coredump"
-// #define BASEBAND_GPIO_RESET_DET "baseband-gpio-reset_det"
-#define BASEBAND_GPIO_RESET_DET_IN "baseband-gpio-reset_det-in"
 #define BASEBAND_GPIO_RESET_DET_OUT "baseband-gpio-reset_det-out"
 
 SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,

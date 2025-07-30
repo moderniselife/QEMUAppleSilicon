@@ -252,8 +252,8 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 {
     uint32_t val;
 
-    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " pin %d/0x%x\n", __func__, addr, pin,
-            pin);
+    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " pin %d/0x%x\n",
+            __func__, addr, pin, pin);
 
     if (pin >= s->pin_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
@@ -263,7 +263,9 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 
     val = s->gpio_cfg[pin];
 
-    if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN)) {
+    //if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN))
+    if ((val & FUNC_MASK) == FUNC_GPIO) // for baseband's reset_det
+    {
         val &= ~DATA_1;
         val |= test_bit32(pin, s->in);
     }

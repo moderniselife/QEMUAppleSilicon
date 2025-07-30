@@ -59,9 +59,8 @@ struct AppleNVMeMMUState {
     PCIBus *pci_bus;
     uint32_t vendor_reg[NVME_APPLE_VENDOR_REG_SIZE / sizeof(uint32_t)];
 
-    MemoryRegion common, config;
+    MemoryRegion common;
     uint32_t common_reg[0x4000 / sizeof(uint32_t)];
-    uint32_t config_reg[0x4000 / sizeof(uint32_t)];
 };
 
 SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus);

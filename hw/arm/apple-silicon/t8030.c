@@ -1538,9 +1538,6 @@ static void t8030_create_baseband(T8030MachineState *t8030_machine)
     connect_function_prop_out_in_gpio(DEVICE(baseband),
                                       dtb_find_prop(child, "function-coredump"),
                                       BASEBAND_GPIO_COREDUMP);
-    connect_function_prop_out_in_gpio(
-        DEVICE(baseband), dtb_find_prop(child, "function-reset_det"),
-        BASEBAND_GPIO_RESET_DET_IN);
     connect_function_prop_in_out_gpio(
         DEVICE(baseband), dtb_find_prop(child, "function-reset_det"),
         BASEBAND_GPIO_RESET_DET_OUT);
