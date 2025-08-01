@@ -50,10 +50,12 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandState, APPLE_BASEBAND)
 
 // s8000: 0x1000/0x1000 (qualcomm)
 // t8015: 0x1000/0x400 (intel)
-// t8030: ??? (intel)
-// make it 0x8000, just to be sure
-#define APPLE_BASEBAND_DEVICE_BAR0_SIZE (0x8000)
-#define APPLE_BASEBAND_DEVICE_BAR1_SIZE (0x8000)
+// srd.cx's ioreg file of the iPhone 11 says that it has three 32-bit bars and the sizes are as follows
+// t8030: 0x1000/0x1000/0x2000 (intel)
+
+#define APPLE_BASEBAND_DEVICE_BAR0_SIZE (0x1000)
+#define APPLE_BASEBAND_DEVICE_BAR1_SIZE (0x1000)
+#define APPLE_BASEBAND_DEVICE_BAR2_SIZE (0x2000)
 
 typedef struct custom_hmap_t {
     uint32_t cap_header;
@@ -76,15 +78,45 @@ typedef struct custom_l1ss_t {
     uint32_t value_ctl2;
 } custom_l1ss_t;
 
+typedef struct QEMU_PACKED baseband_context0_t {
+    uint16_t version;
+    uint16_t size;
+    uint32_t config;
+    /* void* */uint64_t peripheral_info_address;
+    /* void* */uint64_t cr_hia_address;
+    /* void* */uint64_t tr_tia_address;
+    /* void* */uint64_t cr_tia_address;
+    /* void* */uint64_t tr_hia_address;
+    uint16_t cr_ia_entries;
+    uint16_t tr_ia_entries;
+    uint32_t mcr_address_low;
+    uint32_t mcr_address_high;
+    uint32_t mtr_address_low;
+    uint32_t mtr_address_high;
+    uint16_t mtr_entries;
+    uint16_t mcr_entries;
+    uint16_t mtr_doorbell;
+    uint16_t mcr_doorbell;
+    uint16_t mtr_msi;
+    uint16_t mcr_msi;
+    uint8_t mtr_header_size;
+    uint8_t mtr_footer_size;
+    uint8_t mcr_header_size;
+    uint8_t mcr_footer_size;
+    uint16_t bit0_out_of_order__bit1_in_place;
+    uint16_t peripheral_info_msi;
+    /* void* */uint64_t scratch_pad_address;
+    uint32_t scratch_pad_size;
+    uint32_t field_64;
+} baseband_context0_t;
+
 struct AppleBasebandDeviceState {
     PCIDevice parent_obj;
     AppleBasebandState *root;
 
     MemoryRegion container;
-    MemoryRegion bar0;
-    MemoryRegion bar1;
-    MemoryRegion bar0_alias;
-    MemoryRegion bar1_alias;
+    MemoryRegion bar0, bar1, bar2;
+    MemoryRegion bar0_alias, bar1_alias, bar2_alias;
     // MemoryRegion msix; // no msix for now
 
     ApplePCIEPort *port;
@@ -99,6 +131,8 @@ struct AppleBasebandDeviceState {
     bool gpio_coredump_val;
     bool gpio_reset_det_val;
     uint32_t boot_stage;
+    uint64_t context_addr;
+    baseband_context0_t baseband_context0;
 };
 
 struct AppleBasebandState {
@@ -206,6 +240,21 @@ static uint8_t *apple_baseband_dma_read(AppleBasebandDeviceState *s,
     return buf;
 }
 
+static bool apple_baseband_dma_read_ptr(AppleBasebandDeviceState *s,
+                                        uint64_t offset, uint64_t size, uint8_t *buf)
+{
+    DPRINTF("%s: READ @ 0x" HWADDR_FMT_plx " size: 0x" HWADDR_FMT_plx "\n",
+            __func__, offset, size);
+
+    if (dma_memory_read(s->dma_as, offset, buf, size, MEMTXATTRS_UNSPECIFIED) !=
+        MEMTX_OK) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: Failed to read from DMA.",
+                      __func__);
+        return false;
+    }
+    return true;
+}
+
 static void apple_baseband_dma_write(AppleBasebandDeviceState *s,
                                      uint64_t offset, uint64_t size,
                                      uint8_t *buf)
@@ -219,9 +268,123 @@ static void apple_baseband_dma_write(AppleBasebandDeviceState *s,
     }
 }
 
-// mmioWriteBar0 addresses bar1, while mmioWriteBar1 addresses bar0
+static void apple_baseband_device_print_context_info(AppleBasebandDeviceState *s)
+{
+    //g_assert_cmpuint(sizeof(s->baseband_context0), ==, 0x68); // this is also inside the reset function
+
+    if (s->context_addr != 0) {
+        if (!apple_baseband_dma_read_ptr(s, s->context_addr, 4, (uint8_t*)&s->baseband_context0)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: Failed to read from DMA_0.",
+                        __func__);
+            return;
+        }
+
+        g_assert_cmpuint(s->baseband_context0.version, ==, 0x1);
+        g_assert_cmpuint(s->baseband_context0.size, ==, 0x68);
+
+        if (!apple_baseband_dma_read_ptr(s, s->context_addr, s->baseband_context0.size, (uint8_t*)&s->baseband_context0)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: Failed to read from DMA_1.",
+                        __func__);
+            return;
+        }
+
+        DPRINTF("%s: version: 0x%x\n", __func__, s->baseband_context0.version);
+        DPRINTF("%s: size: 0x%x\n", __func__, s->baseband_context0.size);
+        DPRINTF("%s: config: 0x%x\n", __func__, s->baseband_context0.config);
+        DPRINTF("%s: peripheral_info_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.peripheral_info_address);
+        DPRINTF("%s: cr_hia_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.cr_hia_address);
+        DPRINTF("%s: tr_tia_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.tr_tia_address);
+        DPRINTF("%s: cr_tia_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.cr_tia_address);
+        DPRINTF("%s: tr_hia_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.tr_hia_address);
+        DPRINTF("%s: cr_ia_entries: 0x%x\n", __func__, s->baseband_context0.cr_ia_entries);
+        DPRINTF("%s: tr_ia_entries: 0x%x\n", __func__, s->baseband_context0.tr_ia_entries);
+        DPRINTF("%s: mcr_address_low: 0x%x\n", __func__, s->baseband_context0.mcr_address_low);
+        DPRINTF("%s: mcr_address_high: 0x%x\n", __func__, s->baseband_context0.mcr_address_high);
+        DPRINTF("%s: mtr_address_low: 0x%x\n", __func__, s->baseband_context0.mtr_address_low);
+        DPRINTF("%s: mtr_address_high: 0x%x\n", __func__, s->baseband_context0.mtr_address_high);
+        DPRINTF("%s: mtr_entries: 0x%x\n", __func__, s->baseband_context0.mtr_entries);
+        DPRINTF("%s: mcr_entries: 0x%x\n", __func__, s->baseband_context0.mcr_entries);
+        DPRINTF("%s: mtr_doorbell: 0x%x\n", __func__, s->baseband_context0.mtr_doorbell);
+        DPRINTF("%s: mcr_doorbell: 0x%x\n", __func__, s->baseband_context0.mcr_doorbell);
+        DPRINTF("%s: mtr_msi: 0x%x\n", __func__, s->baseband_context0.mtr_msi);
+        DPRINTF("%s: mcr_msi: 0x%x\n", __func__, s->baseband_context0.mcr_msi);
+        DPRINTF("%s: mtr_header_size: 0x%x\n", __func__, s->baseband_context0.mtr_header_size);
+        DPRINTF("%s: mtr_footer_size: 0x%x\n", __func__, s->baseband_context0.mtr_footer_size);
+        DPRINTF("%s: mcr_header_size: 0x%x\n", __func__, s->baseband_context0.mcr_header_size);
+        DPRINTF("%s: mcr_footer_size: 0x%x\n", __func__, s->baseband_context0.mcr_footer_size);
+        DPRINTF("%s: bit0_out_of_order__bit1_in_place: 0x%x\n", __func__, s->baseband_context0.bit0_out_of_order__bit1_in_place);
+        DPRINTF("%s: peripheral_info_msi: 0x%x\n", __func__, s->baseband_context0.peripheral_info_msi);
+        DPRINTF("%s: scratch_pad_address: 0x" HWADDR_FMT_plx "\n", __func__, s->baseband_context0.scratch_pad_address);
+        DPRINTF("%s: scratch_pad_size: 0x%x\n", __func__, s->baseband_context0.scratch_pad_size);
+        DPRINTF("%s: field_64: 0x%x\n", __func__, s->baseband_context0.field_64);
+    }
+}
 
 static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
+                                             uint64_t data, unsigned size)
+{
+    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
+        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEHost *host = port->host;
+    ApplePCIEState *pcie = host->pcie;
+    AppleSPMIBasebandState *spmi = APPLE_SPMI_BASEBAND(object_property_get_link(
+        OBJECT(qdev_get_machine()), "baseband-spmi", &error_fatal));
+    int i, j;
+
+    DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
+            __func__, addr, data);
+    switch (addr) {
+    case 0x90: // ICEBBRTIDevice::updateControl
+        // bit0 // ICEBBRTIDevice::engage
+#if 0
+        if ((data & 1) != 0) {
+        }
+#endif
+        // bit1 // ICEBBRTIDevice::initCheck
+#if 1
+        if ((data & 2) != 0) {
+            apple_baseband_device_print_context_info(s);
+        }
+#endif
+        break;
+    case 0xa0: // ICEBBRTIDevice::updateSleepControl
+        break;
+    // case 0x???: // ICEBBRTIDevice::updateExtraDoorbell: addr == base + (index * 0x18) + 0x10
+    default:
+        break;
+    }
+}
+
+static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
+                                                unsigned size)
+{
+    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    uint32_t val = 0x0;
+
+    switch (addr) {
+    default:
+        break;
+    }
+
+    DPRINTF("%s: READ @ 0x" HWADDR_FMT_plx " value: 0x%x"
+            "\n",
+            __func__, addr, val);
+    return val;
+}
+
+static const MemoryRegionOps bar0_ops = {
+    .read = apple_baseband_device_bar0_read,
+    .write = apple_baseband_device_bar0_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .impl =
+        {
+            .min_access_size = 4,
+            .max_access_size = 4,
+        },
+};
+
+static void apple_baseband_device_bar1_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
@@ -229,9 +392,14 @@ static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
     switch (addr) {
-    case 0x90: // ICEBBRTIDevice::updateContextAddr
+    case 0x90: // ICEBBRTIDevice::updateContextAddr low
+        //s->context_addr &= (UINT32_MAX << 32); // the compiler complains about this, but rightfully so
+        s->context_addr &= (0xffffffffull << 32);
+        s->context_addr |= ((data & UINT32_MAX) << 0);
         break;
-    case 0x94: // ICEBBRTIDevice::updateContextAddr
+    case 0x94: // ICEBBRTIDevice::updateContextAddr high
+        s->context_addr &= (UINT32_MAX << 0);
+        s->context_addr |= ((data & UINT32_MAX) << 32);
         break;
     case 0x98: // ICEBBRTIDevice::updateWindowBase ; DART window
         break;
@@ -257,7 +425,7 @@ typedef struct QEMU_PACKED custom_baseband0_t {
     uint8_t pad1[6]; // 0x36
 } custom_baseband0_t;
 
-static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
+static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
@@ -314,9 +482,9 @@ static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
     return val;
 }
 
-static const MemoryRegionOps bar0_ops = {
-    .read = apple_baseband_device_bar0_read,
-    .write = apple_baseband_device_bar0_write,
+static const MemoryRegionOps bar1_ops = {
+    .read = apple_baseband_device_bar1_read,
+    .write = apple_baseband_device_bar1_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .impl =
         {
@@ -325,42 +493,20 @@ static const MemoryRegionOps bar0_ops = {
         },
 };
 
-static void apple_baseband_device_bar1_write(void *opaque, hwaddr addr,
+static void apple_baseband_device_bar2_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
-    ApplePCIEHost *host = port->host;
-    ApplePCIEState *pcie = host->pcie;
-    AppleSPMIBasebandState *spmi = APPLE_SPMI_BASEBAND(object_property_get_link(
-        OBJECT(qdev_get_machine()), "baseband-spmi", &error_fatal));
-    int i, j;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
     switch (addr) {
-    case 0x90: // ICEBBRTIDevice::updateControl
-        // bit0
-#if 0
-        if ((data & 1) != 0) {
-        }
-#endif
-        // bit1 // IOACIPCRTIDevice::initCheck
-#if 0
-        if ((data & 2) != 0) {
-        }
-#endif
-        break;
-    case 0xa0: // ICEBBRTIDevice::updateSleepControl
-        break;
-    // case 0x???: // ICEBBRTIDevice::updateExtraDoorbell: addr == base + (index * 0x18) + 0x10
     default:
         break;
     }
 }
 
-static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
+static uint64_t apple_baseband_device_bar2_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
@@ -377,9 +523,9 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
     return val;
 }
 
-static const MemoryRegionOps bar1_ops = {
-    .read = apple_baseband_device_bar1_read,
-    .write = apple_baseband_device_bar1_write,
+static const MemoryRegionOps bar2_ops = {
+    .read = apple_baseband_device_bar2_read,
+    .write = apple_baseband_device_bar2_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .impl =
         {
@@ -817,6 +963,11 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     memory_region_init_io(&s->bar1, OBJECT(dev), &bar1_ops, s,
                           "apple-baseband-device-bar1",
                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
+#if 1
+    memory_region_init_io(&s->bar2, OBJECT(dev), &bar2_ops, s,
+                          "apple-baseband-device-bar2",
+                          APPLE_BASEBAND_DEVICE_BAR2_SIZE);
+#endif
 
     g_assert_true(pci_is_express(dev));
     pcie_endpoint_cap_init(dev, 0x70);
@@ -855,19 +1006,47 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 #if 1
     pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar0);
     pci_register_bar(dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar1);
+#if 1
+    pci_register_bar(dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar2);
+#endif
 #endif
 #define BASEBAND_BAR_SUB_ADDR 0x40000000ULL
+#if 0
     memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
                        APPLE_BASEBAND_DEVICE_BAR0_SIZE +
-                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
+                       APPLE_BASEBAND_DEVICE_BAR1_SIZE);
+#endif
+#if 1
+    memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
+                       APPLE_BASEBAND_DEVICE_BAR0_SIZE +
+                       APPLE_BASEBAND_DEVICE_BAR1_SIZE +
+                       APPLE_BASEBAND_DEVICE_BAR2_SIZE);
+#endif
     // these aliases are needed, because iOS will mess with the pci subregions
     memory_region_init_alias(&s->bar0_alias, OBJECT(s), "baseband-bar0-alias",
                              &s->bar0, 0x0, APPLE_BASEBAND_DEVICE_BAR0_SIZE);
     memory_region_init_alias(&s->bar1_alias, OBJECT(s), "baseband-bar1-alias",
                              &s->bar1, 0x0, APPLE_BASEBAND_DEVICE_BAR1_SIZE);
-    memory_region_add_subregion(&s->container, 0x0000, &s->bar0_alias);
-    memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR0_SIZE,
-                                &s->bar1_alias);
+#if 1
+    memory_region_init_alias(&s->bar2_alias, OBJECT(s), "baseband-bar2-alias",
+                             &s->bar2, 0x0, APPLE_BASEBAND_DEVICE_BAR2_SIZE);
+#endif
+    // this needs to be switch precisely here, because both the emulator and iOS have some "damned if you do, damned if you don't" behavior.
+    // apparently, the bars need to be mapped in reverse. easier than keep renaming shit for two/three bars
+#if 0
+    // for two bars
+    memory_region_add_subregion(&s->container, 0x0000, &s->bar1_alias);
+    memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR1_SIZE, &s->bar0_alias);
+#endif
+#if 1
+    // for three bars
+    memory_region_add_subregion(&s->container, 0x0000, &s->bar2_alias);
+    memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR2_SIZE, &s->bar1_alias);
+    memory_region_add_subregion(&s->container,
+                                APPLE_BASEBAND_DEVICE_BAR2_SIZE +
+                                APPLE_BASEBAND_DEVICE_BAR1_SIZE,
+                                &s->bar0_alias);
+#endif
     memory_region_add_subregion(get_system_memory(),
                                 APCIE_ROOT_COMMON_ADDRESS +
                                     BASEBAND_BAR_SUB_ADDR + 0x0000,
@@ -895,9 +1074,9 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     //s->boot_stage = 0xffffffff; // failed to read execution environment
     //s->boot_stage = 0x0;
     s->boot_stage = 0x2; // this stage will skip HMAP, but progresses further
-    //s->boot_stage = 0xfeedbeef;
-    //s->boot_stage = 0x600df00d;
-    //s->boot_stage = 0x1;
+    s->context_addr = 0x0;
+    memset(&s->baseband_context0, 0, sizeof(s->baseband_context0));
+    g_assert_cmpuint(sizeof(s->baseband_context0), ==, 0x68);
 
     // TODO: pcie_cap_slot_reset can and will silently revert
     // set_power/set_enable when it's being done here
