@@ -33,6 +33,7 @@
 // TODO: this is hardcoded for T8030
 #define AIC_INT_COUNT (576)
 #define AIC_CPU_COUNT (6)
+#define AIC_VERSION (2)
 
 #define REG_AIC_REV (0x0000)
 #define REG_AIC_CAP0 (0x0004)
@@ -364,7 +365,7 @@ static uint64_t apple_aic_read(void *opaque, hwaddr addr, unsigned size)
 
     switch (addr) {
     case REG_AIC_REV:
-        return 2;
+        return AIC_VERSION;
     case REG_AIC_CAP0:
         return (((uint64_t)s->numCPU - 1) << 16) | (s->numIRQ);
     case REG_AIC_GLB_CFG:
@@ -506,7 +507,8 @@ static void apple_aic_realize(DeviceState *dev, struct Error **errp)
 
     s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, apple_aic_tick, dev);
     timer_mod_ns(s->timer, kAICWT);
-    msi_nonbroken = true;
+    // this "msi_nonbroken" doesn't seem to belong here. maybe a trick/hack for devices that are initialized later
+    // msi_nonbroken = true;
 }
 
 static void apple_aic_unrealize(DeviceState *dev)

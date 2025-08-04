@@ -72,7 +72,7 @@ static void pcie_set_power_device(PCIBus *bus, PCIDevice *dev, void *opaque)
     pci_set_power(dev, *power);
 }
 
-static void port_devices_set_power(ApplePCIEPort *port, bool power)
+void port_devices_set_power(ApplePCIEPort *port, bool power)
 {
     if (port->manual_enable) {
         PCIDevice *pci_dev = PCI_DEVICE(port);
@@ -170,7 +170,10 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
 
-    int msi_intr_index = 0;
+    //int msi_intr_index = 0;
+    ////int msi_intr_index = 1;
+    int msi_intr_index = data;
+    g_assert_cmpuint(msi_intr_index, <, APPLE_PCIE_NUM_MSI_BANKS);
 
 #if 0
     port->msi.intr[msi_intr_index].status |=
@@ -180,11 +183,31 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
         ~port->msi.intr[msi_intr_index].mask) {
 #endif
     uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
+    DPRINTF("%s: status: 0x%x ; msi_enable: 0x%x\n",
+            __func__, status, port->msi.intr[msi_intr_index].enable);
+    // status = true;
     // status might be msi_intr_index
     if (status) {
-        // qemu_set_irq(port->msi_irqs[msi_intr_index], 1);
-        qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
-        // qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index + 1], 1);
+        //qemu_set_irq(host->msi_irqs[msi_intr_index], 1);
+        qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1); // iOS won't acknowledge the interrupt for whatever reason
+        //qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index + 1], 1);
+        // qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 0);
+#if 0
+        for (int i = 0; i < 32; i++) {
+            //if (i == 24)
+            //    continue;
+            qemu_set_irq(host->msi_irqs[i], 1);
+            //qemu_set_irq(host->msi_irqs[i], 0);
+        }
+#endif
+#if 0
+        for (int i = 0; i < 4; i++) {
+            if (i == 0)
+                continue;
+            qemu_set_irq(host->irqs[i], 1);
+            //qemu_set_irq(host->irqs[i], 0);
+        }
+#endif
     }
 }
 
@@ -248,7 +271,7 @@ static uint32_t apple_pcie_port_bridge_config_read(PCIDevice *d,
         // _initializeRootComplex
         goto jump_default;
     case 0x728:
-        // logLinkState
+        // logLinkState ; ltssm state & 0x1f
         goto jump_default;
     case 0x80c:
         // _initializeRootComplex
@@ -804,6 +827,7 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
 #if 0
     cpu_dump_state(CPU(first_cpu), stderr, CPU_DUMP_CODE);
 #endif
+    // T8030 doesn't support legacy interrupts
 
     is_port_enabled = (port->port_cfg_port_config & 1) != 0;
 
@@ -816,9 +840,11 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
         break;
     case 0x100: // pcielint/getPortInterrupts
         // val = 0xdeadbeef;
-        // val |= 0x10 maybe some vector
+        // val |= 0xf; // legacy interrupts. not on t8030
+        // val |= 0x10; // isPortErrorInterrupt
+        // val |= 0x300; // isPMEHandshakeInterrupt on t8103
         // val |= 0x1000; // link-up interrupt
-        // val |= 0x4000; // link-down interrupt
+        // val |= 0x4000; // link-down interrupt // T8103's one is: 0x80004000
         // val |= 0x8000; // AF timeout interrupt
         // val |= 0x20000; // bad-request-interrupt: malformed mmu request
         // val |= 0x40000; // bad-request-interrupt: msi error
@@ -986,7 +1012,9 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
         port->port_last_interrupt &= ~data; // not xor
         DPRINTF("%s: reg==0x100: Port %u: current_port_last_interrupt: 0x%x\n",
                 __func__, port->bus_nr, port->port_last_interrupt);
-        if (!port->port_last_interrupt) {
+        // port->port_last_interrupt == 0x0 might not be nothing, but INTx 0x0, so always lower irq
+        //if (!port->port_last_interrupt)
+        {
             apple_pcie_set_own_irq(port, 0);
             // qemu_set_irq(port->msi_irqs[msi_intr_index], 0);
         }
@@ -1084,11 +1112,21 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
 #if 1
         uint32_t enable = (data & 1) != 0;
         uint32_t vectors = 1 << ((data & 0xf0) >> 4);
+        uint32_t vector_mask = (1 << vectors) - 1;
+#if 0
         if (enable) {
-            port->msi.intr[msi_intr_index].enable = vectors - 1;
+            port->msi.intr[msi_intr_index].enable = vector_mask;
         } else {
             port->msi.intr[msi_intr_index].enable = 0;
         }
+#endif
+#if 1
+        if (enable) {
+            port->msi.intr[msi_intr_index].enable |= vector_mask;
+        } else {
+            port->msi.intr[msi_intr_index].enable &= ~vector_mask;
+        }
+#endif
         apple_pcie_port_update_msi_mapping(port);
 #endif
         break;
@@ -1453,8 +1491,9 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         port->manual_enable = false;
     }
     if (host->pcie->chip_id == 0x8020 || host->pcie->chip_id == 0x8030) {
-        device_id = 0x1002;
+        // device_id = 0x1002;
         // device_id = 0x1003;
+        device_id = 0x100c; // for t8030, according to srd.cx's iotree
     } else if (child != NULL) {
         device_id = (prop == NULL) ? 0x1003 : 0x1004;
     }
@@ -1844,8 +1883,8 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
 
     // MemoryRegion *host_mem = get_system_memory();
     //  MemoryRegion *address_space = &host->pci.memory;
-    // PCIBridge *br = PCI_BRIDGE(pci_dev);
-    //  br->bus_name  = "apple-pcie";
+    PCIBridge *br = PCI_BRIDGE(pci);
+    br->bus_name  = "apple-pcie";
 
     /* Set unique chassis/slot values for the root port */
     qdev_prop_set_uint8(dev, "chassis", 0);
@@ -1854,10 +1893,14 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
     rpc->parent_realize(dev, &error_fatal);
 
     pci_config_set_device_id(pci->config, port->device_id);
-    pci_config_set_interrupt_pin(pci->config, 0);
+    // pci_config_set_interrupt_pin(pci->config, 0);
 
     // pci_set_word(pci->config + PCI_COMMAND,
     //              PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+#if 1
+    pci_config_set_interrupt_pin(pci->config, 1); // this leads to baseband triggering pci-bridge3, like it should
+    //pci_config_set_interrupt_pin(pci->config, port->bus_nr + 1); // this leads to baseband triggering pci-bridge2 instead of pci-bridge3
+#endif
 
 #if 0
     pci_config_set_interrupt_pin(pci->config, 1);
@@ -1940,13 +1983,16 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
 static int apple_pcie_port_interrupts_init(PCIDevice *d, Error **errp)
 {
     int rc;
+    DPRINTF("%s: entered function\n", __func__);
 
     msi_nonbroken = true;
     // offset 0x50, only 1 vector for the first bridge, 64-bit enabled,
     // per-vector-mask disabled
-    // rc = msi_init(d, 0x50, 1, true, false, errp);
+    //rc = msi_init(d, 0x50, 1, true, false, errp);
     rc = msi_init(d, 0x50, 8, true, false, errp);
+    //rc = msi_init(d, 0x50, 8, true, true, errp);
     if (rc < 0) {
+        DPRINTF("%s: msi_init(d, ...) call failed == %d\n", __func__, rc);
         assert(rc == -ENOTSUP);
     }
 
@@ -1985,9 +2031,6 @@ static uint8_t apple_pcie_aer_vector(const PCIDevice *d)
 
 static const Property apple_pcie_port_props[] = {
     DEFINE_PROP_UINT32("bus_nr", ApplePCIEPort, bus_nr, 0),
-    // DEFINE_PROP_UINT32("clkreq_gpio_id", ApplePCIEPort, clkreq_gpio_id, 0),
-    // DEFINE_PROP_UINT32("clkreq_gpio_value", ApplePCIEPort, clkreq_gpio_value,
-    // 0),
     DEFINE_PROP_UINT32("device_id", ApplePCIEPort, device_id, 0),
     DEFINE_PROP_PCIE_LINK_SPEED("x-speed", PCIESlot, speed, PCIE_LINK_SPEED_8),
     DEFINE_PROP_PCIE_LINK_WIDTH("x-width", PCIESlot, width, PCIE_LINK_WIDTH_2),
@@ -2004,7 +2047,7 @@ static void apple_pcie_port_class_init(ObjectClass *klass, void *data)
     dc->desc = "Apple PCIE Root Port";
     k->vendor_id = PCI_VENDOR_ID_APPLE;
     // s8000: 0x1003 for the bridge ; + 1 if manual-enable property exists?
-    // t8030: 0x1002?
+    // t8030: 0x1002? 0x100c?
     k->device_id = 0;
     k->revision = 0x1;
 

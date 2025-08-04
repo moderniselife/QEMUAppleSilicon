@@ -145,9 +145,7 @@ static const char *KEEP_COMP[] = {
 
 static const char *REM_NAMES[] = {
     "gfx-asc\0$",
-#ifndef ENABLE_BASEBAND
     "amfm\0$",
-#endif
     "dart-ane\0$",     "dart-avd\0$",
     "dart-ave\0$",     "dart-isp\0$",
     "dart-jpeg0\0$",   "dart-jpeg1\0$",

@@ -13,6 +13,7 @@ system_ss.add(when: 'CONFIG_APPLE_SOC', if_true: files(
     'pmu-d2255.c',
     'aop.c',
     'baseband.c',
+    'buttons.c',
 ))
 system_ss.add(when: 'CONFIG_APPLE_SPMI_PMU', if_true: files('spmi-pmu.c'))
 system_ss.add(when: 'CONFIG_APPLE_SPMI_BASEBAND', if_true: files('spmi-baseband.c'))

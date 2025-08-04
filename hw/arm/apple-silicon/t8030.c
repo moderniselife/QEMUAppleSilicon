@@ -49,6 +49,7 @@
 #include "hw/misc/apple-silicon/aes.h"
 #include "hw/misc/apple-silicon/aop.h"
 #include "hw/misc/apple-silicon/baseband.h"
+#include "hw/misc/apple-silicon/buttons.h"
 #include "hw/misc/apple-silicon/chestnut.h"
 #include "hw/misc/apple-silicon/roswell.h"
 #include "hw/misc/apple-silicon/smc.h"
@@ -2579,6 +2580,25 @@ static void t8030_create_audio_speaker_bottom(T8030MachineState *t8030_machine)
     device = ssi_create_peripheral(apple_spi_get_bus(spi), TYPE_APPLE_CS42L77);
 }
 
+static void t8030_create_buttons(T8030MachineState *t8030_machine)
+{
+    int i;
+    uint32_t *ints;
+    DTBProp *prop;
+    uint64_t *reg;
+    SysBusDevice *buttons;
+    DTBNode *child = dtb_get_node(t8030_machine->device_tree, "buttons");
+    DeviceState *gpio = NULL;
+    int reset_det_pin;
+
+    g_assert_nonnull(child);
+    buttons = apple_buttons_create(child);
+    g_assert_nonnull(buttons);
+    object_property_add_child(OBJECT(t8030_machine), "buttons",
+                              OBJECT(buttons));
+    sysbus_realize_and_unref(buttons, &error_fatal);
+}
+
 static void t8030_cpu_reset_work(CPUState *cpu, run_on_cpu_data data)
 {
     T8030MachineState *t8030_machine;
@@ -2888,6 +2908,7 @@ static void t8030_machine_init(MachineState *machine)
     t8030_create_mca(t8030_machine);
     t8030_create_audio_speaker_top(t8030_machine);
     t8030_create_audio_speaker_bottom(t8030_machine);
+    t8030_create_buttons(t8030_machine);
 
     t8030_machine->init_done_notifier.notify = t8030_machine_init_done;
     qemu_add_machine_init_done_notifier(&t8030_machine->init_done_notifier);

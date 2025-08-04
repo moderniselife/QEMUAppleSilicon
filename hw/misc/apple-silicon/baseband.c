@@ -52,6 +52,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandState, APPLE_BASEBAND)
 // t8015: 0x1000/0x400 (intel)
 // srd.cx's ioreg file of the iPhone 11 says that it has three 32-bit bars and the sizes are as follows
 // t8030: 0x1000/0x1000/0x2000 (intel)
+// bar2 (zero-based) might be for msi-x
 
 #define APPLE_BASEBAND_DEVICE_BAR0_SIZE (0x1000)
 #define APPLE_BASEBAND_DEVICE_BAR1_SIZE (0x1000)
@@ -67,7 +68,7 @@ typedef struct custom_hmap_t {
     char _48[4];
     uint32_t field_4c_msi_address_BITWISE_AND_0xffc;
     char _50[0x10];
-    uint64_t field_60_arg2_4KiB_aligned_BITWISE_OR_0x3;
+    uint64_t field_60_arg2_dart_window_virt_4KiB_aligned_BITWISE_OR_0x3;
     uint64_t field_68_arg3_4KiB_aligned;
 } custom_hmap_t;
 
@@ -166,11 +167,18 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 {
     AppleBasebandState *s = APPLE_BASEBAND(opaque);
+    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
+        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEHost *host = port->host;
+    ApplePCIEState *pcie = host->pcie;
+    PCIDevice *port_pci_dev = PCI_DEVICE(port);
     PCIDevice *pci_dev = PCI_DEVICE(s->device);
 #if 1
     if (msi_enabled(pci_dev)) {
         if (level) {
-            msi_notify(pci_dev, 0);
+            msi_notify(pci_dev, 0); // maybe this wouldn't do anything, because the actual msi dma_as is at the port, not at the device
+            // // msi_notify(port_pci_dev, 24);
+            // msi_notify(port_pci_dev, 0);
         }
     } else 
 #endif
@@ -179,6 +187,65 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
     }
 }
 #endif
+
+#if 1
+static void apple_baseband_raise_msi(AppleBasebandDeviceState *s, uint32_t irq_num)
+{
+    AppleBasebandState *baseband = s->root;
+    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
+        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+        ////OBJECT(qdev_get_machine()), "pcie.bridge2", &error_fatal));
+    ApplePCIEHost *host = port->host;
+    ApplePCIEState *pcie = host->pcie;
+    PCIDevice *port_pci_dev = PCI_DEVICE(port);
+    PCIDevice *pci_dev = PCI_DEVICE(baseband->device);
+
+    bool port_is_msi_enabled = msi_enabled(port_pci_dev);
+    bool baseband_is_msi_enabled = msi_enabled(pci_dev);
+    DPRINTF("%s: is port msi_enabled()?: %d\n", __func__, port_is_msi_enabled);
+    DPRINTF("%s: is baseband msi_enabled()?: %d\n", __func__, baseband_is_msi_enabled);
+
+#if 1
+    //msi_notify(port_pci_dev, 0);
+    //msi_notify(pci_dev, 0);
+    uint64_t msi_address = 0xfffff000ull;
+    if (baseband_is_msi_enabled) {
+        //port->port_last_interrupt |= 0x1000;
+        //port->port_last_interrupt |= ;
+        //msi_notify(port_pci_dev, 0);
+        //msi_notify(pci_dev, 0);
+#if 1
+        uint32_t msi_value = 0;
+        msi_value = irq_num;
+        // //msi_value = 1 << irq_num;
+        // //msi_value = 1 << 24;
+        // //msi_value = 1 << 25;
+        // //msi_value = UINT32_MAX;
+        // should this be written by the device or by the OS?
+        address_space_rw(&port->dma_as, msi_address,
+                         MEMTXATTRS_UNSPECIFIED, &msi_value,
+                         sizeof(msi_value), true);
+#endif
+    }
+#endif
+    //port->port_last_interrupt |= 0x1000;
+    //port->port_last_interrupt |= 0xfff;
+    //port->port_last_interrupt |= 0xf;
+    //port->port_last_interrupt |= 0x0;
+    //qemu_set_irq(baseband->irq, level);
+    //pci_set_irq(port_pci_dev, level);
+    //pci_set_irq(port_pci_dev, 1);
+    //pci_set_irq(pci_dev, 1);
+    // TODO: also try device_reset/power_flip instead of this
+#if 0
+    //port->skip_reset_clear = true;
+    port_devices_set_power(port, false);
+    //port->skip_reset_clear = true;
+    port_devices_set_power(port, true);
+#endif
+}
+#endif
+
 
 static void baseband_gpio_coredump(void *opaque, int n, int level)
 {
@@ -556,12 +623,50 @@ static uint32_t apple_baseband_custom_pci_config_read(PCIDevice *d,
             baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
             baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
 #endif
+#if 0
+            // maybe should happen at the write of hmap_hardcoded_offset + 0xc instead.
+            apple_baseband_raise_msi(baseband_device, 0);
+            //apple_baseband_set_irq(baseband, 0, 1);
+#endif
         }
         break;
     }
 
     DPRINTF("%s: READ @ 0x%x value: 0x%x\n", __func__, address, val);
     return val;
+}
+
+static void apple_baseband_custom_pci_config_write(PCIDevice *d, uint32_t address,
+                                                uint32_t val, int len)
+{
+    AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
+        OBJECT(qdev_get_machine()), "baseband", &error_fatal));
+    AppleBasebandDeviceState *baseband_device = baseband->device;
+
+    DPRINTF("%s: WRITE @ 0x%x value: 0x%x\n", __func__, address, val);
+
+    switch (address) {
+    default:
+    jump_default:
+        DPRINTF("%s: default: WRITE DEFAULT @ 0x%x value:"
+                " 0x%x\n",
+                __func__, address, val);
+        pci_default_write_config(d, address, val, len);
+        if (address == (baseband_device->hmap_hardcoded_offset + 0xc)) {
+            // write end
+            DPRINTF("%s: write end\n", __func__);
+#if 0
+            baseband_gpio_set_reset_det(DEVICE(baseband_device), 0); // 0 means 1 == reset detected
+            baseband_gpio_set_reset_det(DEVICE(baseband_device), 1); // 1 means 0 == alive
+#endif
+#if 0
+            // maybe should happen at the write of hmap_hardcoded_offset + 0xc instead.
+            // apple_baseband_raise_msi(baseband_device, 0);
+            apple_baseband_set_irq(baseband, 0, 1);
+#endif
+        }
+        break;
+    }
 }
 
 static uint8_t smc_key_gP07_read(AppleSMCState *s, SMCKey *key,
@@ -963,7 +1068,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     memory_region_init_io(&s->bar1, OBJECT(dev), &bar1_ops, s,
                           "apple-baseband-device-bar1",
                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
-#if 1
+#if 0
     memory_region_init_io(&s->bar2, OBJECT(dev), &bar2_ops, s,
                           "apple-baseband-device-bar2",
                           APPLE_BASEBAND_DEVICE_BAR2_SIZE);
@@ -1006,7 +1111,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 #if 1
     pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar0);
     pci_register_bar(dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar1);
-#if 1
+#if 0
     pci_register_bar(dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar2);
 #endif
 #endif
@@ -1027,18 +1132,18 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
                              &s->bar0, 0x0, APPLE_BASEBAND_DEVICE_BAR0_SIZE);
     memory_region_init_alias(&s->bar1_alias, OBJECT(s), "baseband-bar1-alias",
                              &s->bar1, 0x0, APPLE_BASEBAND_DEVICE_BAR1_SIZE);
-#if 1
+#if 0
     memory_region_init_alias(&s->bar2_alias, OBJECT(s), "baseband-bar2-alias",
                              &s->bar2, 0x0, APPLE_BASEBAND_DEVICE_BAR2_SIZE);
 #endif
     // this needs to be switch precisely here, because both the emulator and iOS have some "damned if you do, damned if you don't" behavior.
     // apparently, the bars need to be mapped in reverse. easier than keep renaming shit for two/three bars
-#if 0
+#if 1
     // for two bars
     memory_region_add_subregion(&s->container, 0x0000, &s->bar1_alias);
     memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR1_SIZE, &s->bar0_alias);
 #endif
-#if 1
+#if 0
     // for three bars
     memory_region_add_subregion(&s->container, 0x0000, &s->bar2_alias);
     memory_region_add_subregion(&s->container, APPLE_BASEBAND_DEVICE_BAR2_SIZE, &s->bar1_alias);
@@ -1055,14 +1160,15 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 
 static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
 {
+    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(obj);
     PCIDevice *dev = PCI_DEVICE(obj);
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(dev);
 
     pci_set_word(dev->config + PCI_COMMAND,
                  PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
 
     // Don't risk any overlap here. e.g. with AER
     s->hmap_hardcoded_offset = 0x180;
+    //s->hmap_hardcoded_offset = 0x100;
     apple_baseband_add_pcie_cap_hmap(s, dev);
     // apple_baseband_add_pcie_cap_l1ss(s, dev);
     s->gpio_coredump_val = 0;
@@ -1072,8 +1178,8 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
 
     //s->boot_stage = 0xfeedb007; // rom stage is legacy
     //s->boot_stage = 0xffffffff; // failed to read execution environment
-    //s->boot_stage = 0x0;
-    s->boot_stage = 0x2; // this stage will skip HMAP, but progresses further
+    s->boot_stage = 0x0;
+    //s->boot_stage = 0x2; // this stage will skip HMAP, but progresses further
     s->context_addr = 0x0;
     memset(&s->baseband_context0, 0, sizeof(s->baseband_context0));
     g_assert_cmpuint(sizeof(s->baseband_context0), ==, 0x68);
@@ -1109,7 +1215,8 @@ static void apple_baseband_device_class_init(ObjectClass *class, void *data)
     c->device_id = 0x7660; // t8030
     c->revision = 0x01; // t8015 && t8030?
     c->class_id = 0x0d40; // t8015 && t8030
-    //c->config_read = apple_baseband_custom_pci_config_read;
+    c->config_read = apple_baseband_custom_pci_config_read;
+    c->config_write = apple_baseband_custom_pci_config_write;
 
     rc->phases.hold = apple_baseband_device_qdev_reset_hold;
 
@@ -1159,7 +1266,7 @@ static void apple_baseband_class_init(ObjectClass *klass, void *data)
     dc->unrealize = apple_baseband_unrealize;
     dc->desc = "Apple Baseband";
     dc->vmsd = &vmstate_apple_baseband;
-    set_bit(DEVICE_CATEGORY_BRIDGE, dc->categories);
+    set_bit(DEVICE_CATEGORY_NETWORK, dc->categories);
 }
 
 static const TypeInfo apple_baseband_types[] = {
