@@ -91,6 +91,12 @@ enum SMCSystemStateNotifyType {
     kSMCSystemStateNotifySMCPanicProgress = 0x22,
 };
 
+enum SMCHIDEventNotifyType {
+    kSMCHIDEventNotifyTypeButton = 1,
+    kSMCHIDEventNotifyTypeInterruptVector = 2,
+    kSMCHIDEventNotifyTypeLidState = 3,
+};
+
 #define kSMCKeyEndpoint 0
 
 enum SMCAttr {

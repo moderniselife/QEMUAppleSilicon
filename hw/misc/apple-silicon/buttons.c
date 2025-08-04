@@ -19,19 +19,18 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dtb.h"
-#include "hw/irq.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/buttons.h"
 #include "hw/misc/apple-silicon/smc.h"
+#include "hw/qdev-core.h"
 #include "migration/vmstate.h"
 #include "qapi/error.h"
-#include "qemu/log.h"
-#include "qemu/units.h"
-#include "system/runstate.h"
 #include "ui/input.h"
+#include "system/runstate.h"
 
 // #define DEBUG_BUTTONS
 #ifdef DEBUG_BUTTONS
+#include "qemu/log.h"
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
         qemu_log_mask(LOG_UNIMP, fmt, ##__VA_ARGS__); \
@@ -45,23 +44,28 @@
 #define TYPE_APPLE_BUTTONS "apple.buttons"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleButtonsState, APPLE_BUTTONS)
 
-#define BUTTONS_ID_BTN_RST (0)
-#define BUTTONS_ID_HOLD (1)
-#define BUTTONS_ID_VOLUP (2)
-#define BUTTONS_ID_VOLDOWN (3)
-#define BUTTONS_ID_RINGERAB (4)
-#define BUTTONS_ID_HOME_AND_APPSWITCHER (6)
-
+#define BUTTON_ID_FORCE_SHUTDOWN (0)
+#define BUTTON_ID_POWER (1)
+#define BUTTON_ID_VOL_UP (2)
+#define BUTTON_ID_VOL_DOWN (3)
+#define BUTTON_ID_RINGER (4)
+#define BUTTON_ID_HELP (5)
+#define BUTTON_ID_MENU (6)
+#define BUTTON_ID_HELP_DOUBLE (7)
+#define BUTTON_ID_HALL_EFFECT_1 (8)
+#define BUTTON_ID_HALL_EFFECT (9)
 
 struct AppleButtonsState {
     /*< private >*/
     SysBusDevice parent_obj;
 
     /*< public >*/
-    uint8_t ringer_old_state;
+    bool ringer_state;
+    bool power_state;
 };
 
-static void apple_buttons_send_button(AppleSMCState *s, uint8_t buttonIndex, uint8_t buttonState)
+static void apple_buttons_send_button(AppleSMCState *s, uint8_t buttonIndex,
+                                      uint8_t buttonState)
 {
     AppleRTKit *rtk;
     KeyResponse r;
@@ -71,8 +75,8 @@ static void apple_buttons_send_button(AppleSMCState *s, uint8_t buttonIndex, uin
     r.status = SMC_NOTIFICATION;
     r.response[0] = buttonState;
     r.response[1] = buttonIndex;
-    r.response[2] = 0x01; // type: 1==lid state/hid-event? 2==vectorState? 3==hid buttons?
-    r.response[3] = 0x72;
+    r.response[2] = kSMCHIDEventNotifyTypeButton;
+    r.response[3] = kSMCEventHIDEventNotify;
     apple_rtkit_send_user_msg(rtk, kSMCKeyEndpoint, r.raw);
 }
 
@@ -91,9 +95,8 @@ static void apple_buttons_event(DeviceState *dev, QemuConsole *src,
     assert(evt->type == INPUT_EVENT_KIND_KEY);
     qcode = qemu_input_key_value_to_qcode(key->key);
 
-    //
-
-    DPRINTF("%s: qcode: 0x%x/%d ; key->down: %d\n", __func__, qcode, qcode, key->down);
+    DPRINTF("%s: qcode: 0x%x/%d ; key->down: %d\n", __func__, qcode, qcode,
+            key->down);
     DPRINTF("%s: Q_KEY_CODE_F1: 0x%x\n", __func__, Q_KEY_CODE_F1);
     DPRINTF("%s: Q_KEY_CODE_F12: 0x%x\n", __func__, Q_KEY_CODE_F12);
 
@@ -101,110 +104,57 @@ static void apple_buttons_event(DeviceState *dev, QemuConsole *src,
     buttonState = key->down;
 
     switch (qcode) {
-#if 0
     case Q_KEY_CODE_F1:
-        buttonIndex = BUTTONS_ID_BTN_RST; // "btn_rst" kernel panic
+        buttonIndex = BUTTON_ID_FORCE_SHUTDOWN; // "btn_rst" kernel panic
         break;
     case Q_KEY_CODE_F2:
-        // can't realiably invoke Siri using Hold, because of key repeat crap,
-        // which automatically creates key-up events
-        buttonIndex = BUTTONS_ID_HOLD;
-        break;
-    case Q_KEY_CODE_F3:
-        if (!buttonState) // do nothing on key-up
+        if (!buttonState) {
             return;
-        buttonIndex = BUTTONS_ID_RINGERAB;
-        buttonState = !s->ringer_old_state;
-        s->ringer_old_state = buttonState;
+        }
+        s->ringer_state = !s->ringer_state;
+        apple_buttons_send_button(smc, BUTTON_ID_RINGER, s->ringer_state);
+        return;
+    case Q_KEY_CODE_F3:
+        buttonIndex = BUTTON_ID_VOL_UP;
         break;
     case Q_KEY_CODE_F4:
-        buttonIndex = BUTTONS_ID_VOLUP;
+        buttonIndex = BUTTON_ID_VOL_DOWN;
         break;
     case Q_KEY_CODE_F5:
-        buttonIndex = BUTTONS_ID_VOLDOWN;
-        break;
-    case Q_KEY_CODE_F6: // again, key repeat crap by the host os
-        buttonIndex = BUTTONS_ID_HOME_AND_APPSWITCHER;
-        break;
-#endif
-#if 1
-    case Q_KEY_CODE_F1:
-        buttonIndex = BUTTONS_ID_BTN_RST; // "btn_rst" kernel panic
-        break;
-    case Q_KEY_CODE_F2:
-        if (!buttonState) // do nothing on key-up
+        if (!buttonState) {
             return;
-        buttonIndex = BUTTONS_ID_RINGERAB;
-        buttonState = !s->ringer_old_state;
-        s->ringer_old_state = buttonState;
-        break;
-    case Q_KEY_CODE_F3:
-        buttonIndex = BUTTONS_ID_VOLUP;
-        break;
-    case Q_KEY_CODE_F4:
-        buttonIndex = BUTTONS_ID_VOLDOWN;
-        break;
-    case Q_KEY_CODE_F5:
-        if (!buttonState) // do nothing on key-up
+        }
+        s->power_state = !s->power_state;
+        apple_buttons_send_button(smc, BUTTON_ID_POWER, s->power_state);
+        return;
+    case Q_KEY_CODE_F6: // Home
+        if (!buttonState) {
             return;
-        buttonIndex = BUTTONS_ID_HOLD;
-        buttonState = true;
-        break;
-    case Q_KEY_CODE_F6:
-        if (!buttonState) // do nothing on key-up
+        }
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, true);
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, false);
+        return;
+    case Q_KEY_CODE_F7: // App Switcher
+        if (!buttonState) {
             return;
-        buttonIndex = BUTTONS_ID_HOLD;
-        buttonState = false;
-        break;
-#if 0
-    case Q_KEY_CODE_F7:
-        if (!buttonState) // do nothing on key-up
-            return;
-        buttonIndex = BUTTONS_ID_HOME_AND_APPSWITCHER;
-        buttonState = true;
-        break;
+        }
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, true);
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, false);
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, true);
+        apple_buttons_send_button(smc, BUTTON_ID_MENU, false);
+        return;
     case Q_KEY_CODE_F8:
-        if (!buttonState) // do nothing on key-up
-            return;
-        buttonIndex = BUTTONS_ID_HOME_AND_APPSWITCHER;
-        buttonState = false;
+        buttonIndex = BUTTON_ID_HELP;
         break;
-#endif
-#if 1
-    case Q_KEY_CODE_F7: // home
-        if (!buttonState) // do nothing on key-up
-            return;
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, true);
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, false);
-        return;
-    case Q_KEY_CODE_F8: // app-switcher
-        if (!buttonState) // do nothing on key-up
-            return;
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, true);
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, false);
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, true);
-        apple_buttons_send_button(smc, BUTTONS_ID_HOME_AND_APPSWITCHER, false);
-        return;
-#endif
-#endif
     case Q_KEY_CODE_F9:
-        buttonIndex = 5;
+        buttonIndex = BUTTON_ID_HELP_DOUBLE;
         break;
     case Q_KEY_CODE_F10:
-        buttonIndex = 7;
+        buttonIndex = BUTTON_ID_HALL_EFFECT_1;
         break;
     case Q_KEY_CODE_F11:
-        buttonIndex = 8;
+        buttonIndex = BUTTON_ID_HALL_EFFECT;
         break;
-    case Q_KEY_CODE_F12:
-        buttonIndex = 9;
-        break;
-    // case Q_KEY_CODE_F11:
-    //     buttonIndex = 10; // null-pointer kernel panic
-    //     break;
-    // case Q_KEY_CODE_F12:
-    //     buttonIndex = 11; // null-pointer kernel panic
-    //     break;
     default:
         return;
     }
@@ -291,7 +241,7 @@ SysBusDevice *apple_buttons_create(DTBNode *node)
     apple_smc_create_key_func(smc, 'btnR', 4, SMCKeyTypeUInt32,
                               SMC_ATTR_FUNCTION | SMC_ATTR_WRITEABLE |
                                   SMC_ATTR_READABLE | 0x20,
-                              &smc_key_btnR_read, &smc_key_btnR_write);
+                              smc_key_btnR_read, smc_key_btnR_write);
 
 
     return sbd;
@@ -300,19 +250,21 @@ SysBusDevice *apple_buttons_create(DTBNode *node)
 static void apple_buttons_qdev_reset_hold(Object *obj, ResetType type)
 {
     AppleButtonsState *s = APPLE_BUTTONS(obj);
-
-    s->ringer_old_state = 0;
+    s->ringer_state = false;
+    s->power_state = false;
 }
 
 static const QemuInputHandler apple_buttons_handler = {
-    .name  = "Apple Buttons",
-    .mask  = INPUT_EVENT_MASK_KEY,
+    .name = "Apple Buttons",
+    .mask = INPUT_EVENT_MASK_KEY,
     .event = apple_buttons_event,
 };
 
 static void apple_buttons_realize(DeviceState *dev, Error **errp)
 {
-    qemu_input_handler_register(dev, &apple_buttons_handler);
+    QemuInputHandlerState *s =
+        qemu_input_handler_register(dev, &apple_buttons_handler);
+    qemu_input_handler_activate(s);
 }
 
 static void apple_buttons_unrealize(DeviceState *dev)
@@ -321,11 +273,13 @@ static void apple_buttons_unrealize(DeviceState *dev)
 }
 
 static const VMStateDescription vmstate_apple_buttons = {
-    .name = "apple_buttons",
+    .name = "AppleButtonsState",
     .version_id = 0,
     .minimum_version_id = 0,
     .fields =
         (const VMStateField[]){
+            VMSTATE_BOOL(ringer_state, AppleButtonsState),
+            VMSTATE_BOOL(power_state, AppleButtonsState),
             VMSTATE_END_OF_LIST(),
         }
 };
@@ -341,7 +295,7 @@ static void apple_buttons_class_init(ObjectClass *klass, void *data)
     dc->unrealize = apple_buttons_unrealize;
     dc->desc = "Apple Buttons";
     dc->vmsd = &vmstate_apple_buttons;
-    set_bit(DEVICE_CATEGORY_MISC, dc->categories);
+    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 }
 
 static const TypeInfo apple_buttons_types[] = {
