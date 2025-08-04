@@ -33,7 +33,6 @@
 // TODO: this is hardcoded for T8030
 #define AIC_INT_COUNT (576)
 #define AIC_CPU_COUNT (6)
-#define AIC_VERSION (2)
 
 #define REG_AIC_REV (0x0000)
 #define REG_AIC_CAP0 (0x0004)
