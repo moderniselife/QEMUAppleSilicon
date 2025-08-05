@@ -308,7 +308,7 @@ static void apple_ans_realize(DeviceState *dev, Error **errp)
     pcie_cap_deverr_init(pci_dev);
     msi_nonbroken = true;
     msi_init(pci_dev, 0, 1, true, false, &error_fatal);
-    //msi_init(pci_dev, 0, 8, true, false, &error_fatal);
+    // msi_init(pci_dev, 0, 8, true, false, &error_fatal);
     pci_pm_init(pci_dev, 0, &error_fatal);
     // pcie_cap_fill_link_ep_usp(pci_dev, QEMU_PCI_EXP_LNK_X2,
     //                           QEMU_PCI_EXP_LNK_8GT);
