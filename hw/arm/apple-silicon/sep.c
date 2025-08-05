@@ -20,7 +20,6 @@
 
 #include "qemu/osdep.h"
 #include "crypto/cipher.h"
-#include "crypto/random.h"
 #include "exec/address-spaces.h"
 #include "exec/tb-flush.h"
 #include "hw/arm/apple-silicon/a13.h"
@@ -3847,7 +3846,7 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
 {
     const struct ecc_curve *ecc = nettle_get_secp_384r1();
     mpz_t temp1;
-    uint8_t rand_bytes[BYTELEN_384] = {0};
+    uint8_t rand_bytes[BYTELEN_384] = { 0 };
 
     ecc_point_init(ecc_pub, ecc);
     ecc_scalar_init(ecc_key, ecc);
@@ -3859,7 +3858,8 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
 #ifdef SEP_DEBUG
         mpz_export(&rand_bytes, NULL, 1, 1, 1, 0, temp1);
 #endif
-        HEXDUMP("generate_ec_priv: rand_bytes", &rand_bytes, sizeof(rand_bytes));
+        HEXDUMP("generate_ec_priv: rand_bytes", &rand_bytes,
+                sizeof(rand_bytes));
     } else {
         mpz_init_set_str(temp1, priv, 16);
     }
@@ -3903,8 +3903,7 @@ static int input_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy)
     HEXDUMP("input_ec_pub: pub_y", &pub_xy[0x00 + BYTELEN_384], BYTELEN_384);
     mpz_inits(temp1, temp2, NULL);
     mpz_import(temp1, BYTELEN_384, 1, 1, 1, 0, &pub_xy[0x00]);
-    mpz_import(temp2, BYTELEN_384, 1, 1, 1, 0,
-               &pub_xy[0x00 + BYTELEN_384]);
+    mpz_import(temp2, BYTELEN_384, 1, 1, 1, 0, &pub_xy[0x00 + BYTELEN_384]);
     ecc_point_init(ecc_pub, ecc);
     ret = ecc_point_set(ecc_pub, temp1, temp2);
 
@@ -4045,8 +4044,8 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
         goto jump_ret1;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
-    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index],
-                         &ecc_pub) != 0) {
+    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
+        0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
@@ -4080,8 +4079,8 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
                &signature);
     mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + 0x00], NULL, 1, 1, 1, 0,
                signature.r);
-    mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + BYTELEN_384], NULL,
-               1, 1, 1, 0, signature.s);
+    mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + BYTELEN_384], NULL, 1, 1, 1,
+               0, signature.s);
     dsa_signature_clear(&signature);
 jump_ret0:
     ecc_point_clear(&ecc_pub);
@@ -4123,8 +4122,8 @@ static void answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
         goto jump_ret1;
     }
-    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index],
-                         &ecc_pub) != 0) {
+    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
+        0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
@@ -4453,8 +4452,7 @@ static void answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
     const char *priv_str = "cccccccccccccccccccccccccccccccccccccccccccccccc"
                            "cccccccccccccccccccccccccccccccccccccccccccccccc";
     // no NULL here, this should stay static
-    if (generate_ec_priv(priv_str, &ssc_state->ecc_key_main,
-                         &ecc_pub) != 0) {
+    if (generate_ec_priv(priv_str, &ssc_state->ecc_key_main, &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
