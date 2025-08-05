@@ -810,7 +810,8 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     child = dtb_get_node(s8000_machine->device_tree, "arm-io/nvme-mmu0");
     g_assert_nonnull(child);
 
-    child_s3e = dtb_get_node(s8000_machine->device_tree, "arm-io/apcie/pci-bridge0/s3e");
+    child_s3e = dtb_get_node(s8000_machine->device_tree,
+                             "arm-io/apcie/pci-bridge0/s3e");
     g_assert_nonnull(child_s3e);
 
     // might also work without the sart regions?
@@ -828,7 +829,8 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     uint64_t nvme_scratch_virt_region[2];
     nvme_scratch_virt_region[0] = sart_virtual_base;
     nvme_scratch_virt_region[1] = S8000_NVME_SART_SIZE;
-    dtb_set_prop(child_s3e, "nvme-scratch-virt-region", sizeof(nvme_scratch_virt_region), &nvme_scratch_virt_region);
+    dtb_set_prop(child_s3e, "nvme-scratch-virt-region",
+                 sizeof(nvme_scratch_virt_region), &nvme_scratch_virt_region);
 
     PCIBridge *pci = PCI_BRIDGE(object_property_get_link(
         OBJECT(s8000_machine), "pcie.bridge0", &error_fatal));
