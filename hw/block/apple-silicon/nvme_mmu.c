@@ -149,8 +149,8 @@ static const MemoryRegionOps apple_nvme_mmu_common_reg_ops = {
 static void apple_nvme_mmu_set_irq(void *opaque, int irq_num, int level)
 {
     AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
-    //qemu_set_irq(s->irq, level);
-    //return;
+    // qemu_set_irq(s->irq, level);
+    // return;
 
     PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
 #if 0
@@ -235,7 +235,7 @@ static void apple_nvme_mmu_realize(DeviceState *dev, Error **errp)
     // for root bridge: offset 0x50, only 1 vector for the first bridge, 64-bit
     // enabled, per-vector-mask disabled
     msi_init(pci_dev, 0, 1, true, false, &error_fatal);
-    //msi_init(pci_dev, 0, 8, true, false, &error_fatal);
+    // msi_init(pci_dev, 0, 8, true, false, &error_fatal);
 
     pci_pm_init(pci_dev, 0, &error_fatal);
     // maximum-link-speed is 2 for s8000 and 3 for t8010
