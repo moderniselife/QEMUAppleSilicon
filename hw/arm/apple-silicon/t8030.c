@@ -38,7 +38,7 @@
 #include "hw/audio/apple-silicon/aop-audio.h"
 #include "hw/audio/apple-silicon/cs35l27.h"
 #include "hw/audio/apple-silicon/cs42l77.h"
-#include "hw/block/apple_ans.h"
+#include "hw/block/apple-silicon/ans.h"
 #include "hw/char/apple_uart.h"
 #include "hw/display/apple_displaypipe_v4.h"
 #include "hw/dma/apple_sio.h"
