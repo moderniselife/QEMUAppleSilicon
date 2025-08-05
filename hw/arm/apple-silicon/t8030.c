@@ -258,6 +258,13 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
 
     // AppleAOPAudioLog::mLogLevel = LogLevelDebug;
     *(uint32_t *)vtop_slid(0xFFFFFFF009881658) = cpu_to_le32(4);
+
+    // Neutralise IOAppleConvergedIPCLogger::obfuscateIOMMUAddr.
+    *(uint32_t *)vtop_slid(0xFFFFFFF0081C51E4) = nop;
+    // Neutralise _buf_kernel_addrperm_addr; mov x8, #0x0.
+    *(uint32_t *)vtop_slid(0xFFFFFFF007BCFC90) = cpu_to_le32(0xD2800008);
+    // No-op `PE_i_can_has_debugger` inside `AppleBaseband::loadBootArguments`.
+    *(uint32_t *)vtop_slid(0xFFFFFFF0093B309C) = nop;
 }
 
 static bool t8030_check_panic(T8030MachineState *t8030_machine)
