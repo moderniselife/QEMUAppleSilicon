@@ -30,7 +30,7 @@
 #include "hw/arm/apple-silicon/sep-sim.h"
 #include "hw/arm/apple-silicon/xnu_pf.h"
 #include "hw/arm/exynos4210.h"
-#include "hw/block/apple_nvme_mmu.h"
+#include "hw/block/apple-silicon/nvme_mmu.h"
 #include "hw/display/apple_displaypipe_v2.h"
 #include "hw/gpio/apple_gpio.h"
 #include "hw/i2c/apple_i2c.h"

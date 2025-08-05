@@ -19,13 +19,9 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/block/apple_nvme_mmu.h"
-#include "hw/irq.h"
+#include "hw/block/apple-silicon/nvme_mmu.h"
 #include "hw/pci-host/apcie.h"
 #include "hw/pci/msi.h"
-#include "hw/pci/pci_device.h"
-#include "hw/sysbus.h"
-#include "qapi/error.h"
 #include "qemu/log.h"
 
 #define DEBUG_NVME_MMU

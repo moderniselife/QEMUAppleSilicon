@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dtb.h"
-#include "hw/block/apple_ans.h"
+#include "hw/block/apple-silicon/ans.h"
 #include "hw/irq.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/nvme/nvme.h"
