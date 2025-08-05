@@ -19,19 +19,11 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
 #include "hw/block/apple-silicon/ans.h"
 #include "hw/irq.h"
-#include "hw/misc/apple-silicon/a7iop/rtkit.h"
-#include "hw/nvme/nvme.h"
 #include "hw/pci/msi.h"
-#include "hw/pci/pci.h"
-#include "hw/pci/pci_device.h"
 #include "migration/vmstate.h"
-#include "qapi/error.h"
-#include "qemu/bitops.h"
 #include "qemu/log.h"
-#include "qemu/module.h"
 
 // #define DEBUG_ANS
 #ifdef DEBUG_ANS

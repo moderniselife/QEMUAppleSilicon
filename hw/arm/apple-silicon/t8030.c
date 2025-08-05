@@ -45,7 +45,6 @@
 #include "hw/gpio/apple_gpio.h"
 #include "hw/i2c/apple_i2c.h"
 #include "hw/intc/apple_aic.h"
-#include "hw/irq.h"
 #include "hw/misc/apple-silicon/aes.h"
 #include "hw/misc/apple-silicon/aop.h"
 #include "hw/misc/apple-silicon/baseband.h"
