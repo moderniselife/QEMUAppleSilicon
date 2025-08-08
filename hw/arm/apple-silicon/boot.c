@@ -23,7 +23,6 @@
 #include "qemu/osdep.h"
 #include "crypto/hash.h"
 #include "crypto/random.h"
-#include "exec/memory.h"
 #include "hw/arm/apple-silicon/boot.h"
 #include "hw/arm/apple-silicon/dtb.h"
 #include "hw/arm/apple-silicon/mem.h"
@@ -34,6 +33,7 @@
 #include "img4.h"
 #include "lzfse.h"
 #include "lzss.h"
+#include "system/memory.h"
 
 // #define BOOT_DEBUG
 
@@ -144,8 +144,7 @@ static const char *KEEP_COMP[] = {
 };
 
 static const char *REM_NAMES[] = {
-    "gfx-asc\0$",
-    "amfm\0$",
+    "gfx-asc\0$",      "amfm\0$",
     "dart-ane\0$",     "dart-avd\0$",
     "dart-ave\0$",     "dart-isp\0$",
     "dart-jpeg0\0$",   "dart-jpeg1\0$",

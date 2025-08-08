@@ -752,7 +752,7 @@ static void apple_aop_reset_hold(Object *obj, ResetType type)
     g_list_foreach(s->endpoints, apple_aop_ep_reset_foreach, NULL);
 }
 
-static void apple_aop_class_init(ObjectClass *klass, void *data)
+static void apple_aop_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc;
     DeviceClass *dc;

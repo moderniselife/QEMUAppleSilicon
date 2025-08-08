@@ -31,6 +31,7 @@
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/bitops.h"
+#include "qemu/error-report.h"
 #include "qemu/log.h"
 #include "qom/object.h"
 #include "trace.h"
@@ -1671,8 +1672,8 @@ static void dwc3_usb_device_handle_packet(USBDevice *dev, USBPacket *p)
 
     if (epid == -1) {
         // qemu_log_mask(LOG_GUEST_ERROR,
-        //               "%s: Unable to find ep for nr: %d pid: 0x%x\n", __func__,
-        //               p->ep->nr, p->pid);
+        //               "%s: Unable to find ep for nr: %d pid: 0x%x\n",
+        //               __func__, p->ep->nr, p->pid);
         p->status = USB_RET_NAK;
         return;
     }
@@ -1844,7 +1845,7 @@ static const VMStateDescription vmstate_usb_dwc3 = {
         }
 };
 
-static void dwc3_usb_device_class_initfn(ObjectClass *klass, void *data)
+static void dwc3_usb_device_class_initfn(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     USBDeviceClass *uc = USB_DEVICE_CLASS(klass);
@@ -1867,7 +1868,7 @@ static void dwc3_usb_device_class_initfn(ObjectClass *klass, void *data)
     set_bit(DEVICE_CATEGORY_USB, dc->categories);
 }
 
-static void usb_dwc3_class_init(ObjectClass *klass, void *data)
+static void usb_dwc3_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     DWC3Class *c = DWC3_USB_CLASS(klass);

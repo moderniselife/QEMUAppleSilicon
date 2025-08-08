@@ -76,7 +76,7 @@ struct AppleAOPAudioState {
     uint32_t historyChannels;
 };
 
-static void apple_aop_audio_class_init(ObjectClass *klass, void *data)
+static void apple_aop_audio_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc;
 

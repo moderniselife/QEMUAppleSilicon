@@ -19,7 +19,6 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/address-spaces.h"
 #include "hw/arm/apple-silicon/a9.h"
 #include "hw/arm/apple-silicon/dtb.h"
 #include "hw/or-irq.h"
@@ -27,8 +26,8 @@
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
-#include "qemu/memalign.h"
 #include "arm-powerctl.h"
+#include "system/address-spaces.h"
 #include "target/arm/cpregs.h"
 
 #define VMSTATE_A9_CPREG(name) \
@@ -163,7 +162,6 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
     ARMCPU *cpu;
     Object *obj;
     DTBProp *prop;
-    uint64_t *reg;
 
     obj = object_new(TYPE_APPLE_A9);
     dev = DEVICE(obj);
@@ -195,8 +193,9 @@ AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, VARIANT, 0x1); /* B1 */
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, REVISION, 0x1);
 
-    cpu->isar.id_aa64mmfr1 =
-        FIELD_DP64(cpu->isar.id_aa64mmfr1, ID_AA64MMFR1, PAN, 0);
+    SET_IDREG(
+        &cpu->isar, ID_AA64MMFR1,
+        FIELD_DP64(GET_IDREG(&cpu->isar, ID_AA64MMFR1), ID_AA64MMFR1, PAN, 0));
 
     object_property_set_uint(obj, "mp-affinity", acpu->mpidr, &error_fatal);
 
@@ -267,7 +266,7 @@ static const VMStateDescription vmstate_apple_a9 = {
         }
 };
 
-static void apple_a9_class_init(ObjectClass *klass, void *data)
+static void apple_a9_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleA9Class *tc = APPLE_A9_CLASS(klass);

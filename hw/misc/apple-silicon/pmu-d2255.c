@@ -444,7 +444,7 @@ static const VMStateDescription pmu_d2255_vmstate = {
         },
 };
 
-static void pmu_d2255_class_init(ObjectClass *klass, void *data)
+static void pmu_d2255_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     I2CSlaveClass *c = I2C_SLAVE_CLASS(klass);

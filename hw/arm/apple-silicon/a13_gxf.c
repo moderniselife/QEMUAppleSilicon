@@ -1,8 +1,6 @@
 #include "qemu/osdep.h"
 #include "exec/cputlb.h"
-#include "exec/exec-all.h"
 #include "hw/arm/apple-silicon/a13_gxf.h"
-#include "qapi/error.h"
 #include "target/arm/cpregs.h"
 #include "target/arm/cpu.h"
 #include "target/arm/internals.h"

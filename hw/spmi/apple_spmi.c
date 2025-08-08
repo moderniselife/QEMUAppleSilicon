@@ -612,7 +612,7 @@ static const VMStateDescription vmstate_apple_spmi = {
         }
 };
 
-static void apple_spmi_class_init(ObjectClass *klass, void *data)
+static void apple_spmi_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleSPMIClass *c = APPLE_SPMI_CLASS(klass);

@@ -602,7 +602,7 @@ static const VMStateDescription vmstate_apple_sio = {
         },
 };
 
-static void apple_sio_class_init(ObjectClass *klass, void *data)
+static void apple_sio_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc;
     DeviceClass *dc;

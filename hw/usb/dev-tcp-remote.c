@@ -804,7 +804,7 @@ static const Property usb_tcp_remote_dev_props[] = {
     DEFINE_PROP_UINT16("conn-port", USBTCPRemoteState, conn_port, 0),
 };
 
-static void usb_tcp_remote_dev_class_init(ObjectClass *klass, void *data)
+static void usb_tcp_remote_dev_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     USBDeviceClass *uc = USB_DEVICE_CLASS(klass);

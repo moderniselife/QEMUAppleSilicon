@@ -235,7 +235,7 @@ static const VMStateDescription vmstate_apple_otg = {
         }
 };
 
-static void apple_otg_class_init(ObjectClass *klass, void *data)
+static void apple_otg_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->realize = apple_otg_realize;

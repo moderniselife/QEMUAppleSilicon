@@ -177,7 +177,8 @@ static void dart_dart_force_active(void *opaque, int n, int level)
     AppleDARTState *s = APPLE_DART(opaque);
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_force_active_val, val);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_force_active_val,
+            val);
     if (s->dart_dart_force_active_val != val) {
         //
     }
@@ -189,7 +190,8 @@ static void dart_dart_request_sid(void *opaque, int n, int level)
     AppleDARTState *s = APPLE_DART(opaque);
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_request_sid_val, val);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_request_sid_val,
+            val);
     if (s->dart_dart_request_sid_val != val) {
         //
     }
@@ -201,7 +203,8 @@ static void dart_dart_release_sid(void *opaque, int n, int level)
     AppleDARTState *s = APPLE_DART(opaque);
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_release_sid_val, val);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_release_sid_val,
+            val);
     if (s->dart_dart_release_sid_val != val) {
         //
     }
@@ -855,7 +858,7 @@ static const VMStateDescription vmstate_apple_dart = {
         }
 };
 
-static void apple_dart_class_init(ObjectClass *klass, void *data)
+static void apple_dart_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
@@ -866,7 +869,7 @@ static void apple_dart_class_init(ObjectClass *klass, void *data)
 }
 
 static void apple_dart_iommu_memory_region_class_init(ObjectClass *klass,
-                                                      void *data)
+                                                      const void *data)
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 

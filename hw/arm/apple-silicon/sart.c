@@ -1,6 +1,6 @@
 #include "qemu/osdep.h"
-#include "exec/address-spaces.h"
 #include "hw/arm/apple-silicon/sart.h"
+#include "system/address-spaces.h"
 
 // #define DEBUG_SART
 
@@ -232,7 +232,7 @@ SysBusDevice *apple_sart_create(DTBNode *node)
     return sbd;
 }
 
-static void apple_sart_class_init(ObjectClass *klass, void *data)
+static void apple_sart_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
@@ -241,7 +241,7 @@ static void apple_sart_class_init(ObjectClass *klass, void *data)
 }
 
 static void apple_sart_iommu_memory_region_class_init(ObjectClass *klass,
-                                                      void *data)
+                                                      const void *data)
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 

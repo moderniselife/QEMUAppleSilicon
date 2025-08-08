@@ -354,7 +354,7 @@ static const VMStateDescription vmstate_apple_ans = {
         }
 };
 
-static void apple_ans_class_init(ObjectClass *klass, void *data)
+static void apple_ans_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

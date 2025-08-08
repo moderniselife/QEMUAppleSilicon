@@ -1075,7 +1075,7 @@ static void apple_sep_sim_reset_hold(Object *obj, ResetType type)
     apple_a7iop_send_ap(a7iop, msg);
 }
 
-static void apple_sep_sim_class_init(ObjectClass *klass, void *data)
+static void apple_sep_sim_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc = RESETTABLE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);

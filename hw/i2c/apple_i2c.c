@@ -323,7 +323,7 @@ static const VMStateDescription vmstate_apple_i2c = {
         }
 };
 
-static void apple_i2c_class_init(ObjectClass *klass, void *data)
+static void apple_i2c_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleHWI2CClass *c = APPLE_I2C_CLASS(klass);

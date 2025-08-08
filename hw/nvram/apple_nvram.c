@@ -492,7 +492,7 @@ static void apple_nvram_unrealize(DeviceState *dev)
     apple_nvram_cleanup(s);
 }
 
-static void apple_nvram_class_init(ObjectClass *klass, void *data)
+static void apple_nvram_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleNvramClass *anc = APPLE_NVRAM_CLASS(klass);

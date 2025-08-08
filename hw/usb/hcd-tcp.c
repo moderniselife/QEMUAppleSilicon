@@ -596,7 +596,7 @@ static const Property usb_tcp_host_props[] = {
     DEFINE_PROP_UINT16("conn-port", USBTCPHostState, conn_port, 0),
 };
 
-static void usb_tcp_host_class_init(ObjectClass *klass, void *data)
+static void usb_tcp_host_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

@@ -293,7 +293,7 @@ static void apple_cs42l77_reset(DeviceState *dev)
     stl_le_p(s->regs + 0xBC09C8, 0xA500); // DSP_TO_HOST
 }
 
-static void apple_cs42l77_class_init(ObjectClass *klass, void *data)
+static void apple_cs42l77_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     SSIPeripheralClass *c = SSI_PERIPHERAL_CLASS(klass);

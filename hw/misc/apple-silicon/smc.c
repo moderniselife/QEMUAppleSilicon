@@ -689,7 +689,7 @@ static void apple_smc_reset_hold(Object *obj, ResetType type)
     memset(s->sram, 0, s->sram_size);
 }
 
-static void apple_smc_class_init(ObjectClass *klass, void *data)
+static void apple_smc_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc;
     DeviceClass *dc;

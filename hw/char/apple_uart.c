@@ -23,7 +23,6 @@
 #include "hw/sysbus.h"
 #include "migration/vmstate.h"
 #include "qapi/error.h"
-#include "qemu/error-report.h"
 #include "qemu/fifo8.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -631,7 +630,7 @@ static const Property apple_uart_properties[] = {
     DEFINE_PROP_UINT32("tx-size", AppleUartState, tx_fifo_size, 15),
 };
 
-static void apple_uart_class_init(ObjectClass *klass, void *data)
+static void apple_uart_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

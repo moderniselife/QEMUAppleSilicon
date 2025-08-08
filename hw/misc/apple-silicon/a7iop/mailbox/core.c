@@ -531,7 +531,7 @@ static const VMStateDescription vmstate_apple_a7iop_mailbox = {
         }
 };
 
-static void apple_a7iop_mailbox_class_init(ObjectClass *klass, void *data)
+static void apple_a7iop_mailbox_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc;
 

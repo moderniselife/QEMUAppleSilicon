@@ -46,7 +46,7 @@ static int apple_spmi_baseband_send(SPMISlave *s, uint8_t *data, uint8_t len)
     if (p->addr == 0x147 && p->reg[p->addr] == 0x2f) {
         DPRINTF("%s: addr 0x%x valid\n", __func__, p->addr);
         // is this interrupt actually affecting anything?
-        //apple_spmi_baseband_set_irq(p, 1);
+        // apple_spmi_baseband_set_irq(p, 1);
     } else {
         DPRINTF("%s: addr 0x%x INVALID\n", __func__, p->addr);
     }
@@ -111,7 +111,7 @@ static const VMStateDescription vmstate_apple_spmi_baseband = {
         }
 };
 
-static void apple_spmi_baseband_class_init(ObjectClass *klass, void *data)
+static void apple_spmi_baseband_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     SPMISlaveClass *sc = SPMI_SLAVE_CLASS(klass);

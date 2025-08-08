@@ -20,12 +20,12 @@
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "exec/memory.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/sysbus.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
 #include "private.h"
+#include "system/memory.h"
 
 #define REG_AXI_BASE_LO (0x8)
 #define REG_AXI_BASE_HI (0x10)

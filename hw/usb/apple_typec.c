@@ -162,7 +162,7 @@ static const VMStateDescription vmstate_apple_typec = {
         }
 };
 
-static void apple_typec_class_init(ObjectClass *klass, void *data)
+static void apple_typec_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->realize = apple_typec_realize;

@@ -50,7 +50,7 @@ static const VMStateDescription vmstate_apple_roswell = {
         },
 };
 
-static void apple_roswell_class_init(ObjectClass *klass, void *data)
+static void apple_roswell_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     I2CSlaveClass *c = I2C_SLAVE_CLASS(klass);

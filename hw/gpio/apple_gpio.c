@@ -252,8 +252,8 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 {
     uint32_t val;
 
-    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " pin %d/0x%x\n",
-            __func__, addr, pin, pin);
+    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " pin %d/0x%x\n", __func__, addr, pin,
+            pin);
 
     if (pin >= s->pin_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
@@ -263,7 +263,7 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 
     val = s->gpio_cfg[pin];
 
-    //if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN))
+    // if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN))
     if ((val & FUNC_MASK) == FUNC_GPIO) // for baseband's reset_det
     {
         val &= ~DATA_1;
@@ -272,12 +272,12 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 
 #if 1
     if (((val & CFG_FUNC0) == CFG_FUNC0) && ((val & CFG_MASK) == CFG_DISABLE)) {
-        //val &= ~DATA_1;
-        //val |= test_bit32(pin, s->in);
-        // TODO: Not even remotely sure if that's correct, but it makes apcie
-        // work while at the same time avoiding i2c bus troubles, that would
-        // happen if it would be like above
-        // maybe the gpio-iic_scl/sda handling needs to be fixed (instead)
+        // val &= ~DATA_1;
+        // val |= test_bit32(pin, s->in);
+        //  TODO: Not even remotely sure if that's correct, but it makes apcie
+        //  work while at the same time avoiding i2c bus troubles, that would
+        //  happen if it would be like above
+        //  maybe the gpio-iic_scl/sda handling needs to be fixed (instead)
         val |= DATA_1;
         val &= ~test_bit32(pin, s->in);
     }
@@ -482,7 +482,7 @@ static const VMStateDescription vmstate_apple_gpio = {
         },
 };
 
-static void apple_gpio_class_init(ObjectClass *klass, void *data)
+static void apple_gpio_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc;
 

@@ -52,7 +52,7 @@
 #define USB_FRMINTVL 12000
 
 /* nifty macros from Arnon's EHCI version  */
-#define get_field(data, field) (((data)&field##_MASK) >> field##_SHIFT)
+#define get_field(data, field) (((data) & field##_MASK) >> field##_SHIFT)
 
 #define set_field(data, newval, field)                     \
     do {                                                   \
@@ -2008,7 +2008,7 @@ static uint64_t dwc2_hsotg_read(void *ptr, hwaddr addr, unsigned size)
         val = dwc2_pcgreg_read(ptr, addr, (addr - HSOTG_REG(0xe00)) >> 2, size);
         break;
     default:
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad offset 0x%"HWADDR_PRIx"\n",
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad offset 0x%" HWADDR_PRIx "\n",
                       __func__, addr);
         val = 0;
         break;
@@ -2052,7 +2052,7 @@ static void dwc2_hsotg_write(void *ptr, hwaddr addr, uint64_t val,
         dwc2_pcgreg_write(ptr, addr, (addr - HSOTG_REG(0xe00)) >> 2, val, size);
         break;
     default:
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad offset 0x%"HWADDR_PRIx"\n",
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: Bad offset 0x%" HWADDR_PRIx "\n",
                       __func__, addr);
         break;
     }
@@ -2451,7 +2451,8 @@ static const Property dwc2_usb_properties[] = {
     DEFINE_PROP_UINT32("usb_version", DWC2State, usb_version, 2),
 };
 
-static void dwc2_usb_device_class_initfn_common(ObjectClass *klass, void *data)
+static void dwc2_usb_device_class_initfn_common(ObjectClass *klass,
+                                                const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     USBDeviceClass *uc = USB_DEVICE_CLASS(klass);
@@ -2474,7 +2475,7 @@ static void dwc2_usb_device_class_initfn_common(ObjectClass *klass, void *data)
     set_bit(DEVICE_CATEGORY_USB, dc->categories);
 }
 
-static void dwc2_class_init(ObjectClass *klass, void *data)
+static void dwc2_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     DWC2Class *c = DWC2_USB_CLASS(klass);

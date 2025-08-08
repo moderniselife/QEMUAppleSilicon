@@ -19,7 +19,6 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/address-spaces.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/a13_gxf.h"
 #include "hw/arm/apple-silicon/dtb.h"
@@ -31,10 +30,10 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
-#include "qemu/memalign.h"
 #include "qemu/queue.h"
 #include "qemu/timer.h"
 #include "arm-powerctl.h"
+#include "system/address-spaces.h"
 #include "system/reset.h"
 #include "target/arm/cpregs.h"
 
@@ -845,7 +844,7 @@ static const VMStateDescription vmstate_apple_a13_cluster = {
         }
 };
 
-static void apple_a13_class_init(ObjectClass *klass, void *data)
+static void apple_a13_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc = RESETTABLE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -859,7 +858,7 @@ static void apple_a13_class_init(ObjectClass *klass, void *data)
     set_bit(DEVICE_CATEGORY_CPU, dc->categories);
 }
 
-static void apple_a13_cluster_class_init(ObjectClass *klass, void *data)
+static void apple_a13_cluster_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

@@ -268,7 +268,7 @@ static void apple_nvme_mmu_reset(DeviceState *qdev)
     pcie_cap_deverr_reset(d);
 }
 
-static void apple_nvme_mmu_class_init(ObjectClass *klass, void *data)
+static void apple_nvme_mmu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

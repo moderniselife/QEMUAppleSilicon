@@ -241,7 +241,7 @@ static const VMStateDescription vmstate_apple_spmi_pmu = {
         }
 };
 
-static void apple_spmi_pmu_class_init(ObjectClass *klass, void *data)
+static void apple_spmi_pmu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     SPMISlaveClass *sc = SPMI_SLAVE_CLASS(klass);

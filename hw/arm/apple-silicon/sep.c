@@ -20,7 +20,6 @@
 
 #include "qemu/osdep.h"
 #include "crypto/cipher.h"
-#include "exec/address-spaces.h"
 #include "exec/tb-flush.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/a9.h"
@@ -45,6 +44,7 @@
 #include "nettle/hkdf.h"
 #include "nettle/hmac.h"
 #include "nettle/knuth-lfib.h"
+#include "system/address-spaces.h"
 #include "system/block-backend-global-state.h"
 #include "system/block-backend-io.h"
 #include "trace.h"
@@ -3618,7 +3618,7 @@ static void apple_sep_reset_hold(Object *obj, ResetType type)
     map_sepfw(s);
 }
 
-static void apple_sep_class_init(ObjectClass *klass, void *data)
+static void apple_sep_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc = RESETTABLE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -4634,7 +4634,7 @@ static const Property apple_ssc_props[] = {
     DEFINE_PROP_DRIVE("drive", AppleSSCState, blk),
 };
 
-static void apple_ssc_class_init(ObjectClass *klass, void *data)
+static void apple_ssc_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     I2CSlaveClass *c = I2C_SLAVE_CLASS(klass);

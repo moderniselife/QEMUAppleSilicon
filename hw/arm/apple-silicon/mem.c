@@ -19,11 +19,10 @@
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "exec/memory.h"
 #include "hw/arm/apple-silicon/dtb.h"
 #include "hw/arm/apple-silicon/mem.h"
 #include "qapi/error.h"
-#include "qemu/error-report.h"
+#include "system/memory.h"
 
 hwaddr g_virt_base, g_phys_base, g_virt_slide, g_phys_slide;
 

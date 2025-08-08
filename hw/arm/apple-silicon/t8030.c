@@ -19,9 +19,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/address-spaces.h"
 #include "exec/memattrs.h"
-#include "exec/memory.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/boot.h"
 #include "hw/arm/apple-silicon/dart.h"
@@ -364,11 +362,11 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     info->kern_entry =
         arm_load_macho(hdr, &address_space_memory, get_system_memory(),
                        memory_map, g_phys_base + g_phys_slide, g_virt_slide);
-    info_report("Kernel virtual base: 0x" TARGET_FMT_lx, g_virt_base);
-    info_report("Kernel physical base: 0x" TARGET_FMT_lx, g_phys_base);
-    info_report("Kernel virtual slide: 0x" TARGET_FMT_lx, g_virt_slide);
-    info_report("Kernel physical slide: 0x" TARGET_FMT_lx, g_phys_slide);
-    info_report("Kernel entry point: 0x" TARGET_FMT_lx, info->kern_entry);
+    info_report("Kernel virtual base: 0x" HWADDR_FMT_plx, g_virt_base);
+    info_report("Kernel physical base: 0x" HWADDR_FMT_plx, g_phys_base);
+    info_report("Kernel virtual slide: 0x" HWADDR_FMT_plx, g_virt_slide);
+    info_report("Kernel physical slide: 0x" HWADDR_FMT_plx, g_phys_slide);
+    info_report("Kernel entry point: 0x" HWADDR_FMT_plx, info->kern_entry);
 
     virt_end += g_virt_slide;
     phys_ptr = vtop_static(ROUND_UP_16K(virt_end));
@@ -3057,7 +3055,7 @@ PROP_STR_GETTER_SETTER(serial_number);
 PROP_STR_GETTER_SETTER(mlb_serial_number);
 PROP_STR_GETTER_SETTER(regulatory_model);
 
-static void t8030_machine_class_init(ObjectClass *klass, void *data)
+static void t8030_machine_class_init(ObjectClass *klass, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(klass);
     ObjectProperty *oprop;

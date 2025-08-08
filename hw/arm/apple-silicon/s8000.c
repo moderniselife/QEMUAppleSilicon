@@ -19,8 +19,6 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/address-spaces.h"
-#include "exec/memory.h"
 #include "hw/arm/apple-silicon/a9.h"
 #include "hw/arm/apple-silicon/dart.h"
 #include "hw/arm/apple-silicon/lm-backlight.h"
@@ -48,6 +46,8 @@
 #include "qemu/guest-random.h"
 #include "qemu/log.h"
 #include "qemu/units.h"
+#include "system/address-spaces.h"
+#include "system/memory.h"
 #include "system/reset.h"
 #include "system/runstate.h"
 #include "system/system.h"
@@ -250,12 +250,12 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
     info->kern_entry =
         arm_load_macho(hdr, nsas, sysmem, memory_map, phys_ptr, g_virt_slide);
 
-    info_report("Kernel virtual base: 0x" TARGET_FMT_lx, g_virt_base);
-    info_report("Kernel physical base: 0x" TARGET_FMT_lx, g_phys_base);
-    info_report("Kernel text off: 0x" TARGET_FMT_lx, info->kern_text_off);
-    info_report("Kernel virtual slide: 0x" TARGET_FMT_lx, g_virt_slide);
-    info_report("Kernel physical slide: 0x" TARGET_FMT_lx, g_phys_slide);
-    info_report("Kernel entry point: 0x" TARGET_FMT_lx, info->kern_entry);
+    info_report("Kernel virtual base: 0x" HWADDR_FMT_plx, g_virt_base);
+    info_report("Kernel physical base: 0x" HWADDR_FMT_plx, g_phys_base);
+    info_report("Kernel text off: 0x" HWADDR_FMT_plx, info->kern_text_off);
+    info_report("Kernel virtual slide: 0x" HWADDR_FMT_plx, g_virt_slide);
+    info_report("Kernel physical slide: 0x" HWADDR_FMT_plx, g_phys_slide);
+    info_report("Kernel entry point: 0x" HWADDR_FMT_plx, info->kern_entry);
 
     virt_end += g_virt_slide;
     phys_ptr = vtop_static(ROUND_UP_16K(virt_end));
@@ -1651,7 +1651,7 @@ static bool s8000_get_force_dfu(Object *obj, Error **errp)
     return s8000_machine->force_dfu;
 }
 
-static void s8000_machine_class_init(ObjectClass *klass, void *data)
+static void s8000_machine_class_init(ObjectClass *klass, const void *data)
 {
     MachineClass *mc;
 

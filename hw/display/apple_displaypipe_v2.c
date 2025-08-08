@@ -299,7 +299,7 @@ static const VMStateDescription vmstate_adp_v2 = {
         },
 };
 
-static void adp_v2_class_init(ObjectClass *klass, void *data)
+static void adp_v2_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 

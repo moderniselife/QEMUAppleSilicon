@@ -422,7 +422,7 @@ static void apple_rtkit_reset_hold(Object *obj, ResetType type)
     }
 }
 
-static void apple_rtkit_class_init(ObjectClass *klass, void *data)
+static void apple_rtkit_class_init(ObjectClass *klass, const void *data)
 {
     ResettableClass *rc;
     DeviceClass *dc;

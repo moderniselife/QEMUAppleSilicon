@@ -230,7 +230,7 @@ SPMISlave *spmi_slave_create_simple(SPMIBus *bus, const char *name, uint8_t sid)
     return dev;
 }
 
-static void spmi_slave_class_init(ObjectClass *klass, void *data)
+static void spmi_slave_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *k = DEVICE_CLASS(klass);
     set_bit(DEVICE_CATEGORY_MISC, k->categories);

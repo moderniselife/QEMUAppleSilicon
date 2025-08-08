@@ -140,7 +140,7 @@ static void apple_a7iop_unrealize(DeviceState *opaque)
     qdev_unrealize(DEVICE(s->ap_mailbox));
 }
 
-static void apple_a7iop_class_init(ObjectClass *oc, void *data)
+static void apple_a7iop_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc;
 
