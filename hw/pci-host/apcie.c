@@ -194,6 +194,8 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
             1); // iOS won't acknowledge the interrupt for whatever reason
         // qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index + 1], 1);
         //  qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 0);
+        //qemu_set_irq(host->msi_irqs[msi_intr_index], 1);
+        //qemu_set_irq(host->msi_irqs[0], 1);
 #if 0
         for (int i = 0; i < 32; i++) {
             //if (i == 24)
@@ -905,8 +907,15 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
                     __func__, port->bus_nr, port->is_link_up);
         }
         val = (port->is_link_up << 0); // getLinkUp
+        if (port->is_link_up)
+        {
+            // TODO: I doubt that this is correct, but it should be good enough.
+            // commented out, because is_link_up stays on during requesting l2
+            // port->is_link_in_l2 = false;
+        }
         // not sure why real s8000 and t8015 continuously fail to enter L2
         val |= (port->is_link_in_l2 << 6); // isLinkInL2
+        port->is_link_in_l2 = false;
         break;
     case 0x210: // linkcdmsts
         val = port->port_linkcdmsts;
@@ -994,8 +1003,18 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
         // s8000: write requestPMEToBroadcast value 0x31
         // read receivedPMEToAck value/pmeto full value and bit0
         // possible expected return value 0x10
+        // bit0 might be the acknowledgement, and bit4 the actual result
+        // bit5 some request bit?
         port->port_pme_to_ack = data;
-        port->port_pme_to_ack &= ~(0x20 | 0x1);
+        //if ((port->port_pme_to_ack & BIT(0)) != 0)
+        if (((port->port_pme_to_ack & BIT(4)) != 0) &&
+            ((port->port_pme_to_ack & BIT(0)) != 0))
+        {
+            // TODO: I doubt that this is correct, but it should be good enough.
+            port->is_link_in_l2 = true;
+        }
+        //port->port_pme_to_ack &= ~(0x20 | 0x1);
+        port->port_pme_to_ack &= ~(BIT(5) | BIT(0));
         break;
     case 0x100: // pcielint? ; and enableInterrupts?
                 // clearLinkUpInterrupt/clearPortInterrupts
@@ -1840,6 +1859,8 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
         port->port_linkcdmsts = 0x0;
         memset(port->port_rid_sid_map, 0, sizeof(port->port_rid_sid_map));
         port->port_ltssm_status = 0x0;
+        port->is_link_up = false;
+        port->is_link_in_l2 = false;
 
         memory_region_set_enabled(&port->msi.iomem, false);
         port->gpio_perst_val = 0;
@@ -1851,8 +1872,6 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
         }
     }
     port->skip_reset_clear = false;
-    port->is_link_up = false;
-    port->is_link_in_l2 = false;
 }
 
 static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
