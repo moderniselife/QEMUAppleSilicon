@@ -231,7 +231,6 @@ static void apple_nvme_mmu_realize(DeviceState *dev, Error **errp)
     pcie_endpoint_cap_init(pci_dev, 0);
     pcie_cap_deverr_init(pci_dev);
 
-    msi_nonbroken = true;
     // for root bridge: offset 0x50, only 1 vector for the first bridge, 64-bit
     // enabled, per-vector-mask disabled
     msi_init(pci_dev, 0, 1, true, false, &error_fatal);

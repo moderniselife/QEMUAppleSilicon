@@ -2048,7 +2048,6 @@ static int apple_pcie_port_interrupts_init(PCIDevice *d, Error **errp)
     int rc;
     DPRINTF("%s: entered function\n", __func__);
 
-    msi_nonbroken = true;
     // offset 0x50, only 1 vector for the first bridge, 64-bit enabled,
     // per-vector-mask disabled
     // rc = msi_init(d, 0x50, 1, true, false, errp);

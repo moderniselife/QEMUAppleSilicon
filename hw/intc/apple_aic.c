@@ -507,9 +507,7 @@ static void apple_aic_realize(DeviceState *dev, struct Error **errp)
 
     s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, apple_aic_tick, dev);
     timer_mod_ns(s->timer, kAICWT);
-    // this "msi_nonbroken" doesn't seem to belong here. maybe a trick/hack for
-    // devices that are initialized later
-    // whoops, other intc devices have this as well
+    
     msi_nonbroken = true;
 }
 

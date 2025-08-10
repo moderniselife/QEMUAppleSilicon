@@ -1246,7 +1246,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     pcie_endpoint_cap_init(dev, 0x70);
 
     pcie_cap_deverr_init(dev);
-    msi_nonbroken = true;
+
     msi_init(dev, 0x50, 1, true, false, &error_fatal);
     pci_pm_init(dev, 0x40, &error_fatal);
 #if 1

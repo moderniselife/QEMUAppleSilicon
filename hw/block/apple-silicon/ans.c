@@ -298,7 +298,7 @@ static void apple_ans_realize(DeviceState *dev, Error **errp)
     g_assert_true(pci_is_express(pci_dev));
     pcie_endpoint_cap_init(pci_dev, 0);
     pcie_cap_deverr_init(pci_dev);
-    msi_nonbroken = true;
+
     msi_init(pci_dev, 0, 1, true, false, &error_fatal);
     // msi_init(pci_dev, 0, 8, true, false, &error_fatal);
     pci_pm_init(pci_dev, 0, &error_fatal);
