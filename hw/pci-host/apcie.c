@@ -25,14 +25,15 @@
 #include "hw/misc/unimp.h"
 #include "hw/pci-host/apcie.h"
 #include "hw/pci/msi.h"
-#include "qapi/error.h"
-#include "qemu/log.h"
+#include "hw/pci/pci-internal.h"
 // #include "hw/pci/msix.h"
 #include "hw/pci/pci_bridge.h"
 #include "hw/pci/pci_host.h"
 #include "hw/pci/pcie_port.h"
 #include "hw/qdev-properties-system.h"
 #include "hw/qdev-properties.h"
+#include "qapi/error.h"
+#include "qemu/log.h"
 
 // #define DEBUG_APCIE
 
@@ -98,7 +99,10 @@ static void apcie_port_gpio_perst(void *opaque, int n, int level)
     assert(n == 0);
     DPRINTF("%s: old: %d ; new %d\n", __func__, port->gpio_perst_val, val);
     if (port->gpio_perst_val != val) {
-        //
+        // val != EP PERST
+        // val: 0 during disable, 1 during enable
+        // this breaks manual-enable ports
+        ////port_devices_set_power(port, val);
     }
     port->gpio_perst_val = val;
 }
@@ -172,7 +176,8 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
 
     // int msi_intr_index = 0;
     ////int msi_intr_index = 1;
-    int msi_intr_index = data;
+    //int msi_intr_index = data;
+    int msi_intr_index = data % 8;
     g_assert_cmpuint(msi_intr_index, <, APPLE_PCIE_NUM_MSI_BANKS);
 
 #if 0
@@ -182,37 +187,37 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
     if (port->msi.intr[msi_intr_index].status &
         ~port->msi.intr[msi_intr_index].mask) {
 #endif
-    uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
-    DPRINTF("%s: status: 0x%x ; msi_enable: 0x%x\n", __func__, status,
-            port->msi.intr[msi_intr_index].enable);
-    // status = true;
+    //uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
+    uint32_t status = BIT(msi_intr_index) &
+                      port->msi.intr[msi_intr_index].enable;
+    DPRINTF("%s: status: 0x%x ; msi_enable: 0x%x ; BIT(msi_intr_index): 0x%"
+            PRIX64 " ; msi_intr_index: 0x%x\n", __func__, status,
+            port->msi.intr[msi_intr_index].enable, BIT(msi_intr_index),
+            msi_intr_index);
+    status = true;
     // status might be msi_intr_index
     if (status) {
-        // qemu_set_irq(host->msi_irqs[msi_intr_index], 1);
-        qemu_set_irq(
-            host->msi_irqs[bus_nr * 8 + msi_intr_index],
-            1); // iOS won't acknowledge the interrupt for whatever reason
-        // qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index + 1], 1);
-        //  qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 0);
-        //qemu_set_irq(host->msi_irqs[msi_intr_index], 1);
-        //qemu_set_irq(host->msi_irqs[0], 1);
-#if 0
-        for (int i = 0; i < 32; i++) {
-            //if (i == 24)
-            //    continue;
-            qemu_set_irq(host->msi_irqs[i], 1);
-            //qemu_set_irq(host->msi_irqs[i], 0);
-        }
-#endif
-#if 0
-        for (int i = 0; i < 4; i++) {
-            if (i == 0)
-                continue;
-            qemu_set_irq(host->irqs[i], 1);
-            //qemu_set_irq(host->irqs[i], 0);
-        }
-#endif
+        // iOS will only acknowledge the interrupt when it expects it, and will
+        // cause an interrupt storm otherwise
+        // need to find a place to quisce it properly
+        qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
+        // pulsing doesn't work.
+        //qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
     }
+}
+
+void apple_pcie_port_temp_lower_msi_irq(ApplePCIEPort *port,
+                                        int msi_intr_index)
+{
+    ApplePCIEHost *host = port->host;
+    int bus_nr = port->bus_nr;
+
+    DPRINTF("%s: temporary function: bus_nr: %d ; msi_intr_index: %d\n",
+            __func__, bus_nr, msi_intr_index);
+
+    g_assert_cmpuint(msi_intr_index, <, APPLE_PCIE_NUM_MSI_BANKS);
+
+    qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 0);
 }
 
 static const MemoryRegionOps apple_pcie_port_msi_ops = {
@@ -236,6 +241,7 @@ static void apple_pcie_port_update_msi_mapping(ApplePCIEPort *port)
     // return;
     memory_region_set_address(mem, base);
     memory_region_set_enabled(mem, enable);
+    //dma_mr
 }
 #endif
 
@@ -1874,6 +1880,18 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
     port->skip_reset_clear = false;
 }
 
+static AddressSpace *apple_pcie_host_set_iommu(PCIBus *bus, void *opaque,
+                                                    int devfn)
+{
+    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+
+    return &port->dma_as;
+}
+
+static const PCIIOMMUOps apple_pcie_iommu_ops = {
+    .get_address_space = apple_pcie_host_set_iommu,
+};
+
 static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
 {
     const hwaddr dummy_offset = 0;
@@ -1922,11 +1940,10 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
     // pci_set_word(pci->config + PCI_COMMAND,
     //              PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
 #if 1
-    pci_config_set_interrupt_pin(
-        pci->config,
-        1); // this leads to baseband triggering pci-bridge3, like it should
-    // pci_config_set_interrupt_pin(pci->config, port->bus_nr + 1); // this
-    // leads to baseband triggering pci-bridge2 instead of pci-bridge3
+    // this leads to baseband triggering pci-bridge3, like it should
+    pci_config_set_interrupt_pin(pci->config, 1);
+    // this leads to baseband triggering pci-bridge2 instead of pci-bridge3
+    // pci_config_set_interrupt_pin(pci->config, port->bus_nr + 1);
 #endif
 
 #if 0
@@ -1984,6 +2001,21 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
 #if 1
     if (port->dma_mr) {
         address_space_init(&port->dma_as, port->dma_mr, "pcieport.dma-as");
+        PCIBus *sec_bus = pci_bridge_get_sec_bus(br);
+        pci_setup_iommu(sec_bus, &apple_pcie_iommu_ops, port);
+#if 0
+        if (pci->config[PCI_SECONDARY_BUS] != 0) {
+            PCIBus *child_bus = pci_find_bus_nr(bus,
+                                                pci->config[PCI_SECONDARY_BUS]);
+            if (child_bus) {
+                pci_setup_iommu(child_bus, &apple_pcie_iommu_ops, port);
+            }
+        }
+#endif
+        // pci_setup_iommu(pci_get_bus(pci), &apple_pcie_iommu_ops, port);
+        // pci_setup_iommu(bus, &apple_pcie_iommu_ops, port);
+        // // PCIHostState *pci_host = PCI_HOST_BRIDGE(port->host);
+        // // pci_setup_iommu(pci_host->bus, &apple_pcie_iommu_ops, port);
     }
 #endif
 #if 1
@@ -2003,6 +2035,10 @@ static void apple_pcie_port_realize(DeviceState *dev, Error **errp)
     }
     memory_region_add_subregion(address_space, dummy_offset, &port->msi.iomem);
     memory_region_set_enabled(&port->msi.iomem, false);
+    // pci_setup_iommu(pci_get_bus(pci), &apple_pcie_iommu_ops, port);
+    // pci_setup_iommu(bus, &apple_pcie_iommu_ops, port);
+    // // PCIHostState *pci_host = PCI_HOST_BRIDGE(port->host);
+    // // pci_setup_iommu(pci_host->bus, &apple_pcie_iommu_ops, port);
 #endif
     port->skip_reset_clear = false;
 }

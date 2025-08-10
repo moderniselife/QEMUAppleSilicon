@@ -155,6 +155,8 @@ struct ApplePCIEState {
 };
 
 void port_devices_set_power(ApplePCIEPort *port, bool power);
+void apple_pcie_port_temp_lower_msi_irq(ApplePCIEPort *port,
+                                        int msi_intr_index);
 SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id);
 
 #endif /* APCIE_H */

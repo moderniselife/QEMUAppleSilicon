@@ -20,6 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "crypto/cipher.h"
+#include "exec/cputlb.h"
 #include "exec/tb-flush.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/a9.h"
@@ -3236,6 +3237,7 @@ static void apple_sep_cpu_moni_jump(CPUState *cpu, run_on_cpu_data data)
     DPRINTF("%s: before cpu_set_pc: base=0x%" VADDR_PRIX "\n", __func__,
             load_addr);
     cpu_set_pc(cpu, load_addr);
+    tlb_flush(cpu); // might be needed for crashes likely caused by tb_flush
     tb_flush(cpu); // possible workaround for intermittent sep boot errors
 }
 

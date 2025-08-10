@@ -27,16 +27,24 @@
 #include "hw/pci/msi.h"
 #include "hw/pci/pci_device.h"
 #include "migration/vmstate.h"
+#include "qemu/cutils.h"
 #include "qemu/log.h"
 #include "qemu/units.h"
 
 #define DEBUG_BASEBAND
 #ifdef DEBUG_BASEBAND
+#define HEXDUMP(a, b, c)               \
+    do {                               \
+        qemu_hexdump(stderr, a, b, c); \
+    } while (0)
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
         qemu_log_mask(LOG_UNIMP, fmt, ##__VA_ARGS__); \
     } while (0)
 #else
+#define HEXDUMP(a, b, c) \
+    do {                 \
+    } while (0)
 #define DPRINTF(fmt, ...) \
     do {                  \
     } while (0)
@@ -136,6 +144,7 @@ struct AppleBasebandDeviceState {
     uint64_t context_addr;
     uint64_t image_addr;
     uint32_t image_size;
+    void *image_ptr;
     baseband_context0_t baseband_context0;
 };
 
@@ -170,8 +179,7 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 {
     AppleBasebandState *s = APPLE_BASEBAND(opaque);
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEPort *port = s->device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -183,7 +191,7 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
             // is at the port, not at the device
             msi_notify(pci_dev, 0);
             // // msi_notify(port_pci_dev, 24);
-            msi_notify(port_pci_dev, 0);
+            // msi_notify(port_pci_dev, 0);
         }
     } else
 #endif
@@ -193,14 +201,12 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 }
 #endif
 
-#if 1
+#if 0
 static void apple_baseband_raise_msi(AppleBasebandDeviceState *s,
                                      uint32_t irq_num)
 {
     AppleBasebandState *baseband = s->root;
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
-    ////OBJECT(qdev_get_machine()), "pcie.bridge2", &error_fatal));
+    ApplePCIEPort *port = s->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -423,12 +429,43 @@ apple_baseband_device_print_context_info(AppleBasebandDeviceState *s)
     }
 }
 
+static void
+apple_baseband_device_update_image_doorbell(AppleBasebandDeviceState *s)
+{
+    AppleBasebandState *baseband = s->root;
+    ApplePCIEPort *port = s->port;
+    if (s->image_ptr != NULL) {
+        g_free(s->image_ptr);
+        s->image_ptr = NULL;
+    }
+    if (s->image_addr != 0 && s->image_size != 0) {
+        s->image_ptr = g_malloc(s->image_size);
+        if (!apple_baseband_dma_read_ptr(s, s->image_addr, s->image_size,
+                                         s->image_ptr)) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: Failed to read image from DMA.",
+                          __func__);
+            return;
+        }
+
+        //
+        DPRINTF("%s: image_addr: 0x%" PRIX64 " image_size: 0x%x \n", __func__,
+                s->image_addr, s->image_size);
+        HEXDUMP("image_first_0x100 bytes", s->image_ptr, MIN(s->image_size,
+                                                             0x100));
+        //s->boot_stage = 1;
+#if 1
+        //apple_baseband_raise_msi(s, 0);
+        //apple_pcie_port_temp_lower_msi_irq(port, 0);
+        apple_baseband_set_irq(baseband, 0, 1); // TODO: not working yet
+#endif
+    }
+}
+
 static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEPort *port = s->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     AppleSPMIBasebandState *spmi = APPLE_SPMI_BASEBAND(object_property_get_link(
@@ -439,8 +476,12 @@ static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
             __func__, addr, data);
     switch (addr) {
     case 0x80: // ICEBBBTIDevice::updateImageDoorbell
+        s->boot_stage = data; // new boot stage
+        // updateImageDoorbell not only on boot_stage 0x1
+        apple_baseband_device_update_image_doorbell(s);
         break;
     case 0x90: // ICEBBRTIDevice::updateControl
+        apple_pcie_port_temp_lower_msi_irq(port, 0);
         // bit0 // ICEBBRTIDevice::engage
 #if 0
         if ((data & 1) != 0) {
@@ -545,6 +586,7 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
     AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    ApplePCIEPort *port = s->port;
     // uint32_t *mmio = &s->vendor_reg[addr >> 2];
     // uint32_t val = *mmio;
     uint32_t val = 0x0;
@@ -579,13 +621,17 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
         val = ldl_le_p(custom_baseband0_ptr + addr - 0x4);
         break;
     case 0x60: // ICEBBRTIDevice::getImageResponse ; ICEBBBTIDevice::getExitCode
-        val = 0x0;
+        // ACIPCBTIDevice::successExitCode: says 0x1 only
+        // IOACIPCBTIDevice::successExitCode: says 0x1 and/or 0x10.
+        val = 0x1;
+        apple_pcie_port_temp_lower_msi_irq(port, 0);
         break;
     case 0x64 ... 0x70: // ICEBBBTIDevice::msiInterrupt
         val = 0x0;
+        apple_pcie_port_temp_lower_msi_irq(port, 0);
         break;
     case 0x88: // ICEBBRTIDevice::getImageSize
-        val = 0x0;
+        val = s->image_size;
         break;
     case 0x8c: // ICEBBRTIDevice::getStatus
         val = 0x1;
@@ -661,9 +707,7 @@ static uint32_t apple_baseband_custom_pci_config_read(PCIDevice *d,
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
     AppleBasebandDeviceState *baseband_device = baseband->device;
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
-        ////OBJECT(qdev_get_machine()), "pcie.bridge2", &error_fatal));
+    ApplePCIEPort *port = baseband_device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -714,9 +758,7 @@ static void apple_baseband_custom_pci_config_write(PCIDevice *d,
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
     AppleBasebandDeviceState *baseband_device = baseband->device;
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
-        ////OBJECT(qdev_get_machine()), "pcie.bridge2", &error_fatal));
+    ApplePCIEPort *port = baseband_device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -800,8 +842,7 @@ static uint8_t smc_key_gP07_write(AppleSMCState *s, SMCKey *key,
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
     AppleBasebandDeviceState *baseband_device = baseband->device;
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEPort *port = baseband_device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -902,8 +943,7 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
     AppleBasebandDeviceState *baseband_device = baseband->device;
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEPort *port = baseband_device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -1057,8 +1097,7 @@ static uint8_t smc_key_gP11_write(AppleSMCState *s, SMCKey *key,
 
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
-    ApplePCIEPort *port = APPLE_PCIE_PORT(object_property_get_link(
-        OBJECT(qdev_get_machine()), "pcie.bridge3", &error_fatal));
+    ApplePCIEPort *port = baseband->device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
     PCIDevice *port_pci_dev = PCI_DEVICE(port);
@@ -1142,6 +1181,43 @@ SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
 
     return sbd;
 }
+
+#if 0
+static void apple_baseband_pci_msi_trigger(PCIDevice *dev, MSIMessage msg)
+{
+    PCIDevice *parent_dev = pci_bridge_get_device(pci_get_bus(dev));
+    DPRINTF("%s: dev: name/devfn: %s:%x\n", __func__, dev->name, dev->devfn);
+    DPRINTF("%s: parent_dev: name/devfn: %s:%x\n",
+            __func__, parent_dev->name, parent_dev->devfn);
+    // parent_dev->msi_trigger(parent_dev, msg);
+    AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
+        OBJECT(qdev_get_machine()), "baseband", &error_fatal));
+    AppleBasebandDeviceState *baseband_device = baseband->device;
+    ApplePCIEPort *port = baseband_device->port;
+    ApplePCIEHost *host = port->host;
+    ApplePCIEState *pcie = host->pcie;
+    PCIDevice *port_pci_dev = PCI_DEVICE(port);
+    PCIDevice *pci_dev = PCI_DEVICE(baseband_device);
+#if 0
+    //pci_dev->msi_trigger(pci_dev, msg);
+    port_pci_dev->msi_trigger(port_pci_dev, msg);
+#endif
+#if 1
+    //MSIMessage msg = {};
+    MemTxAttrs attrs = {
+        //.requester_id = pci_requester_id(pci_dev)
+        .requester_id = pci_requester_id(port_pci_dev)
+    };
+
+    //if (msi_enabled(pci_dev))
+    {
+        //msg = msi_get_message(pci_dev, 0);
+        //address_space_stl_le(&address_space_memory, msg.address, msg.data, attrs, NULL);
+        address_space_stl_le(&port->dma_as, msg.address, msg.data, attrs, NULL);
+    }
+#endif
+}
+#endif
 
 static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 {
@@ -1256,6 +1332,9 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
                                 APCIE_ROOT_COMMON_ADDRESS +
                                 BASEBAND_BAR_SUB_ADDR + 0x0000,
                                 &s->container);
+    s->image_ptr = NULL;
+    // setting msi_trigger doesn't work here
+    //dev->msi_trigger = apple_baseband_pci_msi_trigger;
 }
 
 static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
@@ -1285,6 +1364,10 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     s->context_addr = 0x0;
     s->image_addr = 0x0;
     s->image_size = 0x0;
+    if (s->image_ptr != NULL) {
+        g_free(s->image_ptr);
+        s->image_ptr = NULL;
+    }
     memset(&s->baseband_context0, 0, sizeof(s->baseband_context0));
     g_assert_cmpuint(sizeof(s->baseband_context0), ==, 0x68);
     g_assert_cmpuint(sizeof(custom_baseband0_t), ==, 60);
@@ -1348,6 +1431,11 @@ static void apple_baseband_realize(DeviceState *dev, Error **errp)
                             BASEBAND_GPIO_COREDUMP, 1);
     qdev_init_gpio_out_named(DEVICE(s), &s_device->gpio_reset_det_irq,
                              BASEBAND_GPIO_RESET_DET_OUT, 1);
+
+    // setting msi_trigger here seems to work to some extend
+    // pci_dev->msi_trigger = apple_baseband_pci_msi_trigger;
+    // // PCIDevice *parent_dev = pci_bridge_get_device(pci_get_bus(pci_dev));
+    // // parent_dev->msi_trigger = apple_baseband_pci_msi_trigger;
 }
 
 static void apple_baseband_unrealize(DeviceState *dev)
