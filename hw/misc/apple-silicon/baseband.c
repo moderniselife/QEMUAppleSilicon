@@ -450,12 +450,12 @@ apple_baseband_device_update_image_doorbell(AppleBasebandDeviceState *s)
         //
         DPRINTF("%s: image_addr: 0x%" PRIX64 " image_size: 0x%x \n", __func__,
                 s->image_addr, s->image_size);
-        HEXDUMP("image_first_0x100 bytes", s->image_ptr, MIN(s->image_size,
-                                                             0x100));
-        //s->boot_stage = 1;
+        HEXDUMP("image_first_0x100 bytes", s->image_ptr,
+                MIN(s->image_size, 0x100));
+        // s->boot_stage = 1;
 #if 1
-        //apple_baseband_raise_msi(s, 0);
-        //apple_pcie_port_temp_lower_msi_irq(port, 0);
+        // apple_baseband_raise_msi(s, 0);
+        // apple_pcie_port_temp_lower_msi_irq(port, 0);
         apple_baseband_set_irq(baseband, 0, 1); // TODO: not working yet
 #endif
     }
@@ -603,7 +603,7 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
         break;
     case 0x4 ... 0x3c:
         custom_baseband0.unkn0 = 0xdead;
-        //custom_baseband0.chip_id = 0x60; // chip-id
+        // custom_baseband0.chip_id = 0x60; // chip-id
         custom_baseband0.chip_id = 0x68; // chip-id ; maybe use 0x68
         custom_baseband0.unkn1 = 0xfe;
         memcpy(custom_baseband0.pad0, "FOBART",
@@ -1334,7 +1334,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
                                 &s->container);
     s->image_ptr = NULL;
     // setting msi_trigger doesn't work here
-    //dev->msi_trigger = apple_baseband_pci_msi_trigger;
+    // dev->msi_trigger = apple_baseband_pci_msi_trigger;
 }
 
 static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)

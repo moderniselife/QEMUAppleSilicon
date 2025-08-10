@@ -176,7 +176,7 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
 
     // int msi_intr_index = 0;
     ////int msi_intr_index = 1;
-    //int msi_intr_index = data;
+    // int msi_intr_index = data;
     int msi_intr_index = data % 8;
     g_assert_cmpuint(msi_intr_index, <, APPLE_PCIE_NUM_MSI_BANKS);
 
@@ -202,12 +202,11 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
         // need to find a place to quisce it properly
         qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
         // pulsing doesn't work.
-        //qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
+        // qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
     }
 }
 
-void apple_pcie_port_temp_lower_msi_irq(ApplePCIEPort *port,
-                                        int msi_intr_index)
+void apple_pcie_port_temp_lower_msi_irq(ApplePCIEPort *port, int msi_intr_index)
 {
     ApplePCIEHost *host = port->host;
     int bus_nr = port->bus_nr;
@@ -241,7 +240,7 @@ static void apple_pcie_port_update_msi_mapping(ApplePCIEPort *port)
     // return;
     memory_region_set_address(mem, base);
     memory_region_set_enabled(mem, enable);
-    //dma_mr
+    // dma_mr
 }
 #endif
 
@@ -913,8 +912,7 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
                     __func__, port->bus_nr, port->is_link_up);
         }
         val = (port->is_link_up << 0); // getLinkUp
-        if (port->is_link_up)
-        {
+        if (port->is_link_up) {
             // TODO: I doubt that this is correct, but it should be good enough.
             // commented out, because is_link_up stays on during requesting l2
             // port->is_link_in_l2 = false;
@@ -1012,14 +1010,13 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
         // bit0 might be the acknowledgement, and bit4 the actual result
         // bit5 some request bit?
         port->port_pme_to_ack = data;
-        //if ((port->port_pme_to_ack & BIT(0)) != 0)
+        // if ((port->port_pme_to_ack & BIT(0)) != 0)
         if (((port->port_pme_to_ack & BIT(4)) != 0) &&
-            ((port->port_pme_to_ack & BIT(0)) != 0))
-        {
+            ((port->port_pme_to_ack & BIT(0)) != 0)) {
             // TODO: I doubt that this is correct, but it should be good enough.
             port->is_link_in_l2 = true;
         }
-        //port->port_pme_to_ack &= ~(0x20 | 0x1);
+        // port->port_pme_to_ack &= ~(0x20 | 0x1);
         port->port_pme_to_ack &= ~(BIT(5) | BIT(0));
         break;
     case 0x100: // pcielint? ; and enableInterrupts?
@@ -1881,7 +1878,7 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
 }
 
 static AddressSpace *apple_pcie_host_set_iommu(PCIBus *bus, void *opaque,
-                                                    int devfn)
+                                               int devfn)
 {
     ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
 
