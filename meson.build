@@ -1586,9 +1586,11 @@ if not get_option('brlapi').auto() or have_system
   brlapi = cc.find_library('brlapi', has_headers: ['brlapi.h'],
                          required: get_option('brlapi'))
   if brlapi.found() and not cc.links('''
-     #include <brlapi.h>
-     #include <stddef.h>
-     int main(void) { return brlapi__openConnection (NULL, NULL, NULL); }''', dependencies: brlapi)
+    #include <brlapi.h>
+    #include <stddef.h>
+    int main(void) {
+      return brlapi__openConnection(NULL, NULL, NULL) == BRLAPI_INVALID_FILE_DESCRIPTOR;
+    }''', dependencies: brlapi)
     brlapi = not_found
     if get_option('brlapi').enabled()
       error('could not link brlapi')
@@ -1836,11 +1838,11 @@ if get_option('gnutls').enabled() or (get_option('gnutls').auto() and have_syste
                         required: get_option('gnutls'))
   endif
 
-  if gnutls.found() and not get_option('gnutls-bug1717-workaround').disabled()
+  #if gnutls.found() and not get_option('gnutls-bug1717-workaround').disabled()
     # XXX: when bug 1717 is resolved, add logic to probe for
     # the GNUTLS fixed version number to handle the 'auto' case
-    gnutls_bug1717_workaround = true
-  endif
+  #  gnutls_bug1717_workaround = true
+  #endif
 endif
 
 # We prefer use of gnutls for crypto, unless the options
