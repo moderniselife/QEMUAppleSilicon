@@ -60,21 +60,17 @@ typedef union {
             uint32_t state;
         } power;
         struct {
-            uint32_t epMask;
-            /* bit x -> endpoint ((epBlock * 32) + x) */
-            uint8_t epBlock : 6;
-            uint16_t unk38 : 13;
-            uint8_t epEnded : 1;
-        } rollcall;
+            uint32_t mask;
+            uint8_t block : 6;
+            uint16_t _rsvd : 13;
+            uint8_t end : 1;
+        } rollcall_v11;
         struct {
-            uint64_t epMask : 52;
-            uint8_t type : 4;
+            uint64_t mask : 52;
         } rollcall_v10;
     };
     struct {
-        uint32_t field_0;
-        uint16_t field_32;
-        uint8_t field_48 : 4;
+        uint64_t _rsvd : 52;
         uint8_t type : 4;
     };
 } AppleRTKitManagementMessage;

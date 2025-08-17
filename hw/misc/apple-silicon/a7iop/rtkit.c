@@ -135,6 +135,31 @@ void apple_rtkit_unregister_user_ep(AppleRTKit *s, uint32_t ep)
     apple_rtkit_unregister_ep(s, ep + EP_USER_START);
 }
 
+static gboolean apple_rtkit_rollcall_v10_foreach(gpointer key, gpointer value,
+                                                 gpointer data)
+{
+    ((AppleRTKitManagementMessage *)data)->rollcall_v10.mask |=
+        BIT(GPOINTER_TO_UINT(key));
+
+    return false;
+}
+
+static void apple_rtkit_rollcall_v10(AppleRTKit *s)
+{
+    AppleA7IOP *a7iop;
+    AppleA7IOPMessage *msg;
+    AppleRTKitManagementMessage mgmt_msg;
+
+    a7iop = APPLE_A7IOP(s);
+
+    s->ep0_status = EP0_WAIT_ROLLCALL;
+    mgmt_msg.type = MSG_TYPE_ROLLCALL;
+    mgmt_msg.rollcall_v10.mask = 0;
+    g_tree_foreach(s->endpoints, apple_rtkit_rollcall_v10_foreach, &mgmt_msg);
+    msg = apple_rtkit_construct_msg(EP_MANAGEMENT, mgmt_msg.raw);
+    apple_a7iop_send_ap(a7iop, msg);
+}
+
 typedef struct {
     AppleRTKit *s;
     uint32_t mask;
@@ -150,21 +175,24 @@ static gboolean apple_rtkit_rollcall_v11_foreach(gpointer key, gpointer value,
     AppleA7IOPMessage *msg;
 
     uint32_t ep = GPOINTER_TO_UINT(key);
+
     if (ep < 1) {
         return false;
     }
 
     if (ep / EP_USER_START != d->last_block && d->mask) {
         mgmt_msg.type = MSG_TYPE_ROLLCALL;
-        mgmt_msg.rollcall.epMask = d->mask;
-        mgmt_msg.rollcall.epBlock = d->last_block;
-        mgmt_msg.rollcall.epEnded = false;
+        mgmt_msg.rollcall_v11.mask = d->mask;
+        mgmt_msg.rollcall_v11.block = d->last_block;
+        mgmt_msg.rollcall_v11.end = false;
         msg = apple_rtkit_construct_msg(EP_MANAGEMENT, mgmt_msg.raw);
         QTAILQ_INSERT_TAIL(&s->rollcall, msg, next);
         d->mask = 0;
     }
+
     d->last_block = ep / EP_USER_START;
     d->mask |= 1 << (ep & (EP_USER_START - 1));
+
     return false;
 }
 
@@ -187,38 +215,14 @@ static void apple_rtkit_rollcall_v11(AppleRTKit *s)
     data.s = s;
     g_tree_foreach(s->endpoints, apple_rtkit_rollcall_v11_foreach, &data);
     mgmt_msg.type = MSG_TYPE_ROLLCALL;
-    mgmt_msg.rollcall.epMask = data.mask;
-    mgmt_msg.rollcall.epBlock = data.last_block;
-    mgmt_msg.rollcall.epEnded = true;
+    mgmt_msg.rollcall_v11.mask = data.mask;
+    mgmt_msg.rollcall_v11.block = data.last_block;
+    mgmt_msg.rollcall_v11.end = true;
     msg = apple_rtkit_construct_msg(EP_MANAGEMENT, mgmt_msg.raw);
     QTAILQ_INSERT_TAIL(&s->rollcall, msg, next);
 
     msg = QTAILQ_FIRST(&s->rollcall);
     QTAILQ_REMOVE(&s->rollcall, msg, next);
-    apple_a7iop_send_ap(a7iop, msg);
-}
-
-static gboolean apple_rtkit_rollcall_v10_foreach(gpointer key, gpointer value,
-                                                 gpointer data)
-{
-    ((AppleRTKitManagementMessage *)data)->rollcall_v10.epMask |=
-        1ULL << GPOINTER_TO_UINT(key);
-
-    return false;
-}
-
-static void apple_rtkit_rollcall_v10(AppleRTKit *s)
-{
-    AppleA7IOP *a7iop;
-    AppleA7IOPMessage *msg;
-    AppleRTKitManagementMessage mgmt_msg = { 0 };
-
-    a7iop = APPLE_A7IOP(s);
-
-    s->ep0_status = EP0_WAIT_ROLLCALL;
-    mgmt_msg.rollcall_v10.type = MSG_TYPE_ROLLCALL;
-    g_tree_foreach(s->endpoints, apple_rtkit_rollcall_v10_foreach, &mgmt_msg);
-    msg = apple_rtkit_construct_msg(EP_MANAGEMENT, mgmt_msg.raw);
     apple_a7iop_send_ap(a7iop, msg);
 }
 
