@@ -111,8 +111,11 @@ enum {
 };
 
 enum {
-    ART_STORAGE_OP_SEND_ART = 20,
-    ART_STORAGE_OP_ART_RECEIVED = 21,
+    ART_STORAGE_OP_ART_LOAD = 1, // AppleSEPARTStorage::handle_first_connected
+    ART_STORAGE_OP_NO_ART = 2,
+    ART_STORAGE_OP_MANIFEST = 3,
+    ART_STORAGE_OP_INCOMING = 20, // AppleSEPARTStorage::_msgAction
+    ART_STORAGE_OP_RECEIVED = 21,
 };
 
 enum {
@@ -369,7 +372,7 @@ static void apple_sep_sim_handle_control_msg(AppleSEPSimState *s,
                           "EP_XART_STORAGE: Failed to write ART to OOL");
         }
         apple_sep_sim_send_message(s, EP_ART_STORAGE, 0,
-                                   ART_STORAGE_OP_SEND_ART, 0, 0);
+                                   ART_STORAGE_OP_INCOMING, 0, 0);
         break;
     }
     default:
@@ -382,7 +385,7 @@ static void apple_sep_sim_handle_control_msg(AppleSEPSimState *s,
 static void apple_sep_sim_handle_arts_msg(AppleSEPSimState *s, SEPMessage *msg)
 {
     switch (msg->op) {
-    case ART_STORAGE_OP_ART_RECEIVED:
+    case ART_STORAGE_OP_RECEIVED:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_ART_STORAGE: ART_RECEIVED\n");
         break;
     default:
