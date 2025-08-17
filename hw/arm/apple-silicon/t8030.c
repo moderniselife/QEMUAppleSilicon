@@ -2699,6 +2699,18 @@ static void t8030_machine_init(MachineState *machine)
         return;
     }
 
+    if (t8030_machine->sep_fw_filename == NULL) {
+        if (machine->smp.cpus > A13_MAX_CPU) {
+            error_setg(&error_abort,
+                       "Too many CPU cores specified for simulated SEP!");
+            return;
+        }
+    } else if (machine->smp.cpus < 2) {
+        error_setg(&error_abort,
+                   "Too few CPU cores specified for emulated SEP!");
+        return;
+    }
+
     allocate_ram(get_system_memory(), "SROM", SROM_BASE, SROM_SIZE, 0);
     allocate_ram(get_system_memory(), "SRAM", SRAM_BASE, SRAM_SIZE, 0);
     memory_region_add_subregion(get_system_memory(), DRAM_BASE, machine->ram);
