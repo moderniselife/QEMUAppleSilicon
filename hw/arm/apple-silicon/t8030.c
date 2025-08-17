@@ -106,13 +106,8 @@
 
 static size_t t8030_real_cpu_count(T8030MachineState *t8030_machine)
 {
-    MachineState *machine;
-
-    machine = MACHINE(t8030_machine);
-
-    return (t8030_machine->sep_rom_filename || t8030_machine->sep_fw_filename) ?
-               machine->smp.cpus - 1 :
-               machine->smp.cpus;
+    return MACHINE(t8030_machine)->smp.cpus -
+           (t8030_machine->sep_fw_filename != NULL);
 }
 
 static void t8030_start_cpus(T8030MachineState *t8030_machine,
@@ -121,7 +116,7 @@ static void t8030_start_cpus(T8030MachineState *t8030_machine,
     int i;
 
     for (i = 0; i < t8030_real_cpu_count(t8030_machine); i++) {
-        if (test_bit(i, (unsigned long *)&cpu_mask) &&
+        if ((cpu_mask & BIT(i)) != 0 &&
             apple_a13_cpu_is_powered_off(t8030_machine->cpus[i])) {
             apple_a13_cpu_start(t8030_machine->cpus[i]);
         }
