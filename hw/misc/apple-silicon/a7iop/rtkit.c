@@ -176,11 +176,7 @@ static gboolean apple_rtkit_rollcall_v11_foreach(gpointer key, gpointer value,
 
     uint32_t ep = GPOINTER_TO_UINT(key);
 
-    if (ep < 1) {
-        return false;
-    }
-
-    if (ep / EP_USER_START != d->last_block && d->mask) {
+    if (ep / EP_USER_START != d->last_block && d->mask != 0) {
         mgmt_msg.type = MSG_TYPE_ROLLCALL;
         mgmt_msg.rollcall_v11.mask = d->mask;
         mgmt_msg.rollcall_v11.block = d->last_block;
