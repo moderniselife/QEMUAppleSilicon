@@ -40,16 +40,17 @@ const VMStateDescription vmstate_apple_rtkit = {
 #define MSG_HELLO_ACK (2)
 #define MSG_TYPE_PING (3)
 #define MSG_TYPE_PING_ACK (4)
-#define MSG_TYPE_EPSTART (5)
-#define MSG_TYPE_SET_IOP_PSTATE (6)
+#define MSG_TYPE_SET_EP_STATUS (5)
+#define MSG_TYPE_REQ_POWER (6)
 #define MSG_GET_PSTATE(_x) ((_x) & 0xFFF) // TODO: Investigate this
 #define PSTATE_SLPNOMEM (0x0)
 #define PSTATE_WAIT_VR (0x201)
 #define PSTATE_PWRGATE (0x202)
 #define PSTATE_ON (0x220)
-#define MSG_TYPE_SET_AP_PSTATE_ACK (7)
+#define MSG_TYPE_POWER_ACK (7)
 #define MSG_TYPE_ROLLCALL (8)
-#define MSG_TYPE_SET_AP_PSTATE (11)
+#define MSG_TYPE_POWER_NAP (10)
+#define MSG_TYPE_AP_POWER (11)
 
 static inline AppleA7IOPMessage *apple_rtkit_construct_msg(uint32_t ep,
                                                            uint64_t data)
@@ -254,16 +255,14 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
         apple_rtkit_send_msg(s, ep, m.raw);
         return;
     }
-    case MSG_TYPE_SET_AP_PSTATE: {
-        m.type = MSG_TYPE_SET_AP_PSTATE;
+    case MSG_TYPE_AP_POWER: {
+        m.type = MSG_TYPE_AP_POWER;
         m.power.state = msg->power.state;
         apple_rtkit_send_msg(s, ep, m.raw);
         return;
     }
-    case MSG_TYPE_SET_IOP_PSTATE: {
-        if (s->protocol_version >= 11) {
-            g_assert_cmphex(s->ep0_status, ==, EP0_IDLE);
-        }
+    case MSG_TYPE_REQ_POWER: {
+        g_assert_cmphex(s->ep0_status, ==, EP0_IDLE);
 
         switch (MSG_GET_PSTATE(msg->raw)) {
         case PSTATE_WAIT_VR:
@@ -272,7 +271,7 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
             break;
         }
         case PSTATE_SLPNOMEM: {
-            m.type = MSG_TYPE_SET_AP_PSTATE_ACK;
+            m.type = MSG_TYPE_POWER_ACK;
             m.power.state = MSG_GET_PSTATE(msg->raw);
             apple_a7iop_set_cpu_status(a7iop, CPU_STATUS_IDLE);
             apple_rtkit_send_msg(s, ep, m.raw);
@@ -288,7 +287,7 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
         g_assert_cmphex(s->ep0_status, ==, EP0_WAIT_ROLLCALL);
 
         if (QTAILQ_EMPTY(&s->rollcall)) {
-            m.type = MSG_TYPE_SET_AP_PSTATE_ACK;
+            m.type = MSG_TYPE_POWER_ACK;
             m.power.state = 32;
             s->ep0_status = EP0_IDLE;
             trace_apple_rtkit_rollcall_finished(a7iop->role);
@@ -304,7 +303,7 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
         }
         break;
     }
-    case MSG_TYPE_EPSTART: {
+    case MSG_TYPE_SET_EP_STATUS: {
         break;
     }
     default: {
