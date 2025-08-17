@@ -187,7 +187,7 @@ static gboolean apple_rtkit_rollcall_v11_foreach(gpointer key, gpointer value,
     }
 
     d->last_block = ep / EP_USER_START;
-    d->mask |= 1 << (ep & (EP_USER_START - 1));
+    d->mask |= BIT(ep % EP_USER_START);
 
     return false;
 }
