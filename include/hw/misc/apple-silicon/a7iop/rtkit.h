@@ -43,31 +43,33 @@ typedef struct {
 
 typedef union {
     uint64_t raw;
-    struct {
-        union {
-            struct {
-                uint16_t major;
-                uint16_t minor;
-            } hello;
-            struct {
-                uint32_t seg;
-                uint16_t timestamp;
-            } ping;
-            struct {
-                uint32_t state;
-                uint32_t ep;
-            } epstart;
-            struct {
-                uint32_t state;
-            } power;
-            struct {
-                uint32_t epMask;
-                /* bit x -> endpoint ((epBlock * 32) + x) */
-                uint8_t epBlock : 6;
-                uint16_t unk38 : 13;
-                uint8_t epEnded : 1;
-            } rollcall;
-        };
+    union {
+        struct {
+            uint16_t major;
+            uint16_t minor;
+        } hello;
+        struct {
+            uint32_t seg;
+            uint16_t timestamp;
+        } ping;
+        struct {
+            uint32_t state;
+            uint32_t ep;
+        } epstart;
+        struct {
+            uint32_t state;
+        } power;
+        struct {
+            uint32_t epMask;
+            /* bit x -> endpoint ((epBlock * 32) + x) */
+            uint8_t epBlock : 6;
+            uint16_t unk38 : 13;
+            uint8_t epEnded : 1;
+        } rollcall;
+        struct {
+            uint64_t epMask : 52;
+            uint8_t type : 4;
+        } rollcall_v10;
     };
     struct {
         uint32_t field_0;
@@ -84,12 +86,6 @@ typedef struct {
     AppleRTKitEPHandler *handler;
     bool user;
 } AppleRTKitEPData;
-
-typedef struct {
-    AppleRTKit *s;
-    uint32_t mask;
-    uint32_t last_block;
-} AppleRTKitRollcallData;
 
 typedef struct {
     void (*start)(void *opaque);

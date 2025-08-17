@@ -134,15 +134,22 @@ void apple_rtkit_unregister_user_ep(AppleRTKit *s, uint32_t ep)
     apple_rtkit_unregister_ep(s, ep + EP_USER_START);
 }
 
-static gboolean iop_rollcall(gpointer key, gpointer value, gpointer data)
+typedef struct {
+    AppleRTKit *s;
+    uint32_t mask;
+    uint32_t last_block;
+} AppleRTKitRollcallV11Data;
+
+static gboolean apple_rtkit_rollcall_v11_foreach(gpointer key, gpointer value,
+                                                 gpointer data)
 {
-    AppleRTKitRollcallData *d = (AppleRTKitRollcallData *)data;
+    AppleRTKitRollcallV11Data *d = (AppleRTKitRollcallV11Data *)data;
     AppleRTKit *s = d->s;
     AppleRTKitManagementMessage mgmt_msg = { 0 };
     AppleA7IOPMessage *msg;
 
-    uint32_t ep = (uint64_t)key;
-    if ((uint64_t)key < 1) {
+    uint32_t ep = GPOINTER_TO_UINT(key);
+    if (ep < 1) {
         return false;
     }
 
@@ -160,23 +167,24 @@ static gboolean iop_rollcall(gpointer key, gpointer value, gpointer data)
     return false;
 }
 
-static void iop_start_rollcall(AppleRTKit *s)
+static void apple_rtkit_rollcall_v11(AppleRTKit *s)
 {
     AppleA7IOP *a7iop;
-    AppleRTKitRollcallData data = { 0 };
     AppleA7IOPMessage *msg;
+    AppleRTKitRollcallV11Data data = { 0 };
     AppleRTKitManagementMessage mgmt_msg = { 0 };
 
     a7iop = APPLE_A7IOP(s);
 
-    data.s = s;
     while (!QTAILQ_EMPTY(&s->rollcall)) {
         msg = QTAILQ_FIRST(&s->rollcall);
         QTAILQ_REMOVE(&s->rollcall, msg, next);
         g_free(msg);
     }
+
     s->ep0_status = EP0_WAIT_ROLLCALL;
-    g_tree_foreach(s->endpoints, iop_rollcall, &data);
+    data.s = s;
+    g_tree_foreach(s->endpoints, apple_rtkit_rollcall_v11_foreach, &data);
     mgmt_msg.type = MSG_TYPE_ROLLCALL;
     mgmt_msg.rollcall.epMask = data.mask;
     mgmt_msg.rollcall.epBlock = data.last_block;
@@ -186,6 +194,30 @@ static void iop_start_rollcall(AppleRTKit *s)
 
     msg = QTAILQ_FIRST(&s->rollcall);
     QTAILQ_REMOVE(&s->rollcall, msg, next);
+    apple_a7iop_send_ap(a7iop, msg);
+}
+
+static gboolean apple_rtkit_rollcall_v10_foreach(gpointer key, gpointer value,
+                                                 gpointer data)
+{
+    ((AppleRTKitManagementMessage *)data)->rollcall_v10.epMask |=
+        1ULL << GPOINTER_TO_UINT(key);
+
+    return false;
+}
+
+static void apple_rtkit_rollcall_v10(AppleRTKit *s)
+{
+    AppleA7IOP *a7iop;
+    AppleA7IOPMessage *msg;
+    AppleRTKitManagementMessage mgmt_msg = { 0 };
+
+    a7iop = APPLE_A7IOP(s);
+
+    s->ep0_status = EP0_WAIT_ROLLCALL;
+    mgmt_msg.rollcall_v10.type = MSG_TYPE_ROLLCALL;
+    g_tree_foreach(s->endpoints, apple_rtkit_rollcall_v10_foreach, &mgmt_msg);
+    msg = apple_rtkit_construct_msg(EP_MANAGEMENT, mgmt_msg.raw);
     apple_a7iop_send_ap(a7iop, msg);
 }
 
@@ -208,7 +240,11 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
     case MSG_HELLO_ACK: {
         g_assert_cmphex(s->ep0_status, ==, EP0_WAIT_HELLO);
 
-        iop_start_rollcall(s);
+        if (s->protocol_version <= 10) {
+            apple_rtkit_rollcall_v10(s);
+        } else {
+            apple_rtkit_rollcall_v11(s);
+        }
         break;
     }
     case MSG_TYPE_PING: {
@@ -225,7 +261,9 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
         return;
     }
     case MSG_TYPE_SET_IOP_PSTATE: {
-        g_assert_cmphex(s->ep0_status, ==, EP0_IDLE);
+        if (s->protocol_version >= 11) {
+            g_assert_cmphex(s->ep0_status, ==, EP0_IDLE);
+        }
 
         switch (MSG_GET_PSTATE(msg->raw)) {
         case PSTATE_WAIT_VR:
@@ -304,7 +342,9 @@ static void apple_rtkit_iop_start(AppleA7IOP *s)
         rtk->ops->start(rtk->opaque);
     }
 
-    apple_rtkit_mgmt_send_hello(rtk);
+    if (rtk->protocol_version >= 11) {
+        apple_rtkit_mgmt_send_hello(rtk);
+    }
 }
 
 static void apple_rtkit_iop_wakeup(AppleA7IOP *s)
