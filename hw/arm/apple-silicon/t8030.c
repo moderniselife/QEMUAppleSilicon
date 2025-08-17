@@ -19,7 +19,6 @@
  */
 
 #include "qemu/osdep.h"
-#include "exec/memattrs.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/boot.h"
 #include "hw/arm/apple-silicon/dart.h"
@@ -60,8 +59,6 @@
 #include "hw/ssi/ssi.h"
 #include "hw/usb/apple_typec.h"
 #include "hw/watchdog/apple_wdt.h"
-#include "qapi/visitor.h"
-#include "qemu/bswap.h"
 #include "qemu/error-report.h"
 #include "qemu/guest-random.h"
 #include "qemu/log.h"
@@ -3072,7 +3069,7 @@ static void t8030_machine_class_init(ObjectClass *klass, const void *data)
     MachineClass *mc = MACHINE_CLASS(klass);
     ObjectProperty *oprop;
 
-    mc->desc = "t8030";
+    mc->desc = "Apple T8030 SoC (iPhone 11)";
     mc->init = t8030_machine_init;
     mc->reset = t8030_machine_reset;
     mc->max_cpus = A13_MAX_CPU + 1;
