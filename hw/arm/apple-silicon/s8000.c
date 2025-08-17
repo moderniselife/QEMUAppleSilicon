@@ -109,7 +109,7 @@ static void s8000_start_cpus(MachineState *machine, uint64_t cpu_mask)
     int i;
 
     for (i = 0; i < machine->smp.cpus; i++) {
-        if (test_bit(i, (unsigned long *)&cpu_mask) &&
+        if ((cpu_mask & BIT(i)) != 0 &&
             apple_a9_cpu_is_powered_off(s8000_machine->cpus[i])) {
             apple_a9_cpu_start(s8000_machine->cpus[i]);
         }
@@ -1656,7 +1656,7 @@ static void s8000_machine_class_init(ObjectClass *klass, const void *data)
     MachineClass *mc;
 
     mc = MACHINE_CLASS(klass);
-    mc->desc = "S8000";
+    mc->desc = "Apple S8000 SoC (iPhone 6s Plus)";
     mc->init = s8000_machine_init;
     mc->reset = s8000_machine_reset;
     mc->max_cpus = A9_MAX_CPU;
