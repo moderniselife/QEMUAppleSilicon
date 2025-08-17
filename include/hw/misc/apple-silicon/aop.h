@@ -45,7 +45,6 @@ typedef enum {
 
 typedef struct {
     AppleAOPEndpointType type;
-    uint32_t align;
     const char *service_name;
     uint32_t service_id;
     uint32_t interface_num;

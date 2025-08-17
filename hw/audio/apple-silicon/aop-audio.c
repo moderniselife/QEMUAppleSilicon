@@ -70,10 +70,10 @@ struct AppleAOPAudioState {
     SysBusDevice parent_obj;
 
     AppleAOPEndpoint *ep;
-    uint32_t supportedChannels;
-    uint32_t enabledChannels;
-    uint32_t voiceTriggerChannels;
-    uint32_t historyChannels;
+    uint32_t supported_chans;
+    uint32_t enabled_chans;
+    uint32_t voice_trigger_chans;
+    uint32_t history_chans;
 };
 
 static void apple_aop_audio_class_init(ObjectClass *klass, const void *data)
@@ -168,10 +168,10 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
                 break;
             case DEV_PROP_CHANNEL_CTRL:
                 stl_le_p(payload_out, DEV_PROP_CHANNEL_CTRL_LEN);
-                stl_le_p(payload_out + 4, s->supportedChannels);
-                stl_le_p(payload_out + 8, s->enabledChannels);
-                stl_le_p(payload_out + 12, s->voiceTriggerChannels);
-                stl_le_p(payload_out + 16, s->historyChannels);
+                stl_le_p(payload_out + 4, s->supported_chans);
+                stl_le_p(payload_out + 8, s->enabled_chans);
+                stl_le_p(payload_out + 12, s->voice_trigger_chans);
+                stl_le_p(payload_out + 16, s->history_chans);
                 break;
             case DEV_PROP_STREAM_FORMAT:
                 stl_le_p(payload_out, DEV_PROP_STREAM_FORMAT_LEN);
@@ -239,11 +239,11 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
         case 'lpai':
             switch (ldl_le_p(payload + COMMAND_HDR_LEN + 4)) {
             case DEV_PROP_CHANNEL_CTRL:
-                s->supportedChannels = ldl_le_p(payload + COMMAND_HDR_LEN + 12);
-                s->enabledChannels = ldl_le_p(payload + COMMAND_HDR_LEN + 16);
-                s->voiceTriggerChannels =
+                s->supported_chans = ldl_le_p(payload + COMMAND_HDR_LEN + 12);
+                s->enabled_chans = ldl_le_p(payload + COMMAND_HDR_LEN + 16);
+                s->voice_trigger_chans =
                     ldl_le_p(payload + COMMAND_HDR_LEN + 20);
-                s->historyChannels = ldl_le_p(payload + COMMAND_HDR_LEN + 24);
+                s->history_chans = ldl_le_p(payload + COMMAND_HDR_LEN + 24);
                 break;
             }
             break;
@@ -256,7 +256,6 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
 
 static const AppleAOPEndpointDescription apple_aop_audio_ep_descr = {
     .type = AOP_EP_TYPE_APP,
-    .align = 64,
     .service_name = "aop-audio",
     .service_id = 0x1000000D,
     .rx_len = 0x4000,

@@ -546,6 +546,32 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     g_virt_base = virt_low;
 }
 
+static void t8030_rtkit_seg_prop_setup(DTBNode *child, DTBNode *iop_nub,
+                                       hwaddr base, hwaddr text_size,
+                                       hwaddr data_size, bool segr_on_child)
+{
+    AppleIOPSegmentRange segranges[2];
+
+    dtb_set_prop_str(child, "segment-names", "__TEXT;__DATA");
+    dtb_set_prop_str(iop_nub, "segment-names", "__TEXT;__DATA");
+
+    memset(segranges, 0, sizeof(segranges));
+    segranges[0].phys = base;
+    segranges[0].size = text_size;
+    segranges[0].flags = BIT(0);
+    segranges[1].phys = segranges[0].phys + text_size;
+    segranges[1].virt = text_size;
+    segranges[1].remap = text_size;
+    segranges[1].size = data_size;
+
+    dtb_set_prop_u64(iop_nub, "region-base", segranges[0].phys);
+    dtb_set_prop_u64(iop_nub, "region-size", text_size + data_size);
+    dtb_set_prop(iop_nub, "segment-ranges", sizeof(segranges), segranges);
+    if (segr_on_child) {
+        dtb_set_prop(child, "segment-ranges", sizeof(segranges), segranges);
+    }
+}
+
 static void t8030_rtkit_mem_setup(T8030MachineState *t8030_machine,
                                   CarveoutAllocator *ca, const char *name,
                                   const char *nub_name, hwaddr text_size,
@@ -553,7 +579,6 @@ static void t8030_rtkit_mem_setup(T8030MachineState *t8030_machine,
 {
     DTBNode *child;
     DTBNode *iop_nub;
-    AppleIOPSegmentRange segranges[2];
 
     child = dtb_get_node(t8030_machine->device_tree, "arm-io");
     g_assert_nonnull(child);
@@ -562,27 +587,9 @@ static void t8030_rtkit_mem_setup(T8030MachineState *t8030_machine,
     iop_nub = dtb_get_node(child, nub_name);
     g_assert_nonnull(iop_nub);
 
-    dtb_set_prop_str(child, "segment-names", "__TEXT;__DATA");
-    dtb_set_prop_str(iop_nub, "segment-names", "__TEXT;__DATA");
-
-    segranges[0].phys = carveout_alloc_mem(ca, text_size + data_size);
-    segranges[0].virt = 0;
-    segranges[0].remap = 0;
-    segranges[0].size = text_size;
-    segranges[0].flags = 0x1;
-
-    segranges[1].phys = segranges[0].phys + text_size;
-    segranges[1].virt = text_size;
-    segranges[1].remap = text_size;
-    segranges[1].size = data_size;
-    segranges[1].flags = 0x0;
-
-    dtb_set_prop_u64(iop_nub, "region-base", segranges[0].phys);
-    dtb_set_prop_u64(iop_nub, "region-size", text_size + data_size);
-    dtb_set_prop(iop_nub, "segment-ranges", sizeof(segranges), segranges);
-    if (segr_on_child) {
-        dtb_set_prop(child, "segment-ranges", sizeof(segranges), segranges);
-    }
+    t8030_rtkit_seg_prop_setup(child, iop_nub,
+                               carveout_alloc_mem(ca, text_size + data_size),
+                               text_size, data_size, segr_on_child);
 }
 
 static void t8030_memory_setup(T8030MachineState *t8030_machine)
@@ -2476,12 +2483,23 @@ static void t8030_create_aop(T8030MachineState *t8030_machine)
     DTBNode *dart_aop = dtb_get_node(child, "dart-aop");
     DTBNode *dart_aop_mapper = dtb_get_node(dart_aop, "mapper-aop");
     SysBusDevice *sbd;
+    uint64_t region_size;
+    uint64_t region_base;
 
     g_assert_nonnull(child);
     child = dtb_get_node(child, "aop");
     g_assert_nonnull(child);
     iop_nub = dtb_get_node(child, "iop-aop-nub");
     g_assert_nonnull(iop_nub);
+
+    prop = dtb_find_prop(iop_nub, "region-size");
+    g_assert_nonnull(prop);
+    region_size = ldq_le_p(prop->data);
+    prop = dtb_find_prop(iop_nub, "region-base");
+    g_assert_nonnull(prop);
+    region_base = ldq_le_p(prop->data);
+    t8030_rtkit_seg_prop_setup(child, iop_nub, region_base, region_size / 2,
+                               region_size - (region_size / 2), true);
 
     aop = apple_aop_create(child, APPLE_A7IOP_V4,
                            t8030_machine->rtkit_protocol_ver);

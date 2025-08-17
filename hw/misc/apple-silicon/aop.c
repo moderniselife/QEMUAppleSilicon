@@ -136,6 +136,7 @@ struct AppleAOPState {
     MemoryRegion *dma_mr;
     AddressSpace dma_as;
     GList *endpoints;
+    uint32_t align;
 };
 
 typedef enum {
@@ -161,7 +162,7 @@ struct AppleAOPEndpoint {
 static MemTxResult apple_aop_ep_init_rb(AppleAOPEndpoint *s, uint32_t addr,
                                         uint32_t len)
 {
-    TXOK_GUARD(stl_le_dma(&s->aop->dma_as, addr, len - (s->descr->align * 3),
+    TXOK_GUARD(stl_le_dma(&s->aop->dma_as, addr, len - (s->aop->align * 3),
                           MEMTXATTRS_UNSPECIFIED));
     TXOK_GUARD(
         stw_le_dma(&s->aop->dma_as, addr + 4, 6, MEMTXATTRS_UNSPECIFIED));
@@ -171,28 +172,28 @@ static MemTxResult apple_aop_ep_init_rb(AppleAOPEndpoint *s, uint32_t addr,
 static MemTxResult apple_aop_ep_set_rptr(AppleAOPEndpoint *s, uint32_t addr,
                                          uint32_t val)
 {
-    return stl_le_dma(&s->aop->dma_as, addr + s->descr->align, val,
+    return stl_le_dma(&s->aop->dma_as, addr + s->aop->align, val,
                       MEMTXATTRS_UNSPECIFIED);
 }
 
 static MemTxResult apple_aop_ep_get_rptr(AppleAOPEndpoint *s, uint32_t addr,
                                          uint32_t *val)
 {
-    return ldl_le_dma(&s->aop->dma_as, addr + s->descr->align, val,
+    return ldl_le_dma(&s->aop->dma_as, addr + s->aop->align, val,
                       MEMTXATTRS_UNSPECIFIED);
 }
 
 static MemTxResult apple_aop_ep_set_wptr(AppleAOPEndpoint *s, uint32_t addr,
                                          uint32_t val)
 {
-    return stl_le_dma(&s->aop->dma_as, addr + s->descr->align * 2, val,
+    return stl_le_dma(&s->aop->dma_as, addr + s->aop->align * 2, val,
                       MEMTXATTRS_UNSPECIFIED);
 }
 
 static MemTxResult apple_aop_ep_get_wptr(AppleAOPEndpoint *s, uint32_t addr,
                                          uint32_t *val)
 {
-    return ldl_le_dma(&s->aop->dma_as, addr + s->descr->align * 2, val,
+    return ldl_le_dma(&s->aop->dma_as, addr + s->aop->align * 2, val,
                       MEMTXATTRS_UNSPECIFIED);
 }
 
@@ -345,11 +346,11 @@ static MemTxResult apple_aop_ep_send_packet_full(AppleAOPEndpoint *s,
 
     TXOK_GUARD(apple_aop_ep_get_wptr(s, s->tx_off, &wptr));
 
-    data_off = s->descr->align * 3;
+    data_off = s->aop->align * 3;
 
     if (ROUND_UP(data_off + wptr + RB_ENTRY_LEN + PACKET_LEN + SUB_PACKET_LEN +
                      len,
-                 s->descr->align) > s->descr->tx_len) {
+                 s->aop->align) > s->descr->tx_len) {
         wptr = 0;
     }
 
@@ -367,7 +368,7 @@ static MemTxResult apple_aop_ep_send_packet_full(AppleAOPEndpoint *s,
                                 payload, len, MEMTXATTRS_UNSPECIFIED));
     wptr += len;
     TXOK_GUARD(
-        apple_aop_ep_set_wptr(s, s->tx_off, ROUND_UP(wptr, s->descr->align)));
+        apple_aop_ep_set_wptr(s, s->tx_off, ROUND_UP(wptr, s->aop->align)));
 
     apple_rtkit_send_user_msg(rtk, s->num, MSG_TX_SIGNAL);
 
@@ -477,7 +478,7 @@ static MemTxResult apple_aop_ep_recv_packet_locked(
 
     TXOK_GUARD(apple_aop_ep_get_rptr(s, s->rx_off, &rptr));
 
-    data_off = s->descr->align * 3;
+    data_off = s->aop->align * 3;
 
     TXOK_GUARD(
         apple_aop_ep_read_rb_entry(s, s->rx_off + data_off + rptr, &entry_len));
@@ -493,7 +494,7 @@ static MemTxResult apple_aop_ep_recv_packet_locked(
     TXOK_GUARD(dma_memory_read(&s->aop->dma_as, s->rx_off + data_off + rptr,
                                *payload, *len, MEMTXATTRS_UNSPECIFIED));
     rptr += *len;
-    rptr = ROUND_UP(rptr, s->descr->align);
+    rptr = ROUND_UP(rptr, s->aop->align);
     if (rptr >= s->descr->rx_len) {
         rptr = 0;
     }
@@ -819,6 +820,9 @@ SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
                           TYPE_APPLE_AOP ".ascv2-core-reg", reg[3]);
     sysbus_init_mmio(sbd, &s->ascv2_iomem);
 
+    prop = dtb_find_prop(child, "aop-memory-alignment");
+    s->align = prop == NULL ? 0x40 : ldl_le_p(prop->data);
+
     dtb_set_prop_u32(child, "pre-loaded", 1);
     dtb_set_prop_u32(child, "running", 1);
 
@@ -830,6 +834,10 @@ AppleAOPEndpoint *apple_aop_ep_create(AppleAOPState *s, void *opaque,
 {
     AppleAOPEndpoint *ep;
     AppleRTKit *rtk;
+
+    g_assert_nonnull(descr);
+    g_assert_cmpuint(descr->rx_len % s->align, ==, 0);
+    g_assert_cmpuint(descr->tx_len % s->align, ==, 0);
 
     ep = g_new0(AppleAOPEndpoint, 1);
     rtk = APPLE_RTKIT(s);
