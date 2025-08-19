@@ -355,7 +355,7 @@ static const MemoryRegionOps ascv2_core_reg_ops = {
 };
 
 SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
-                               uint32_t protocol_version, uint32_t sram_size)
+                               uint32_t protocol_version, uint64_t sram_size)
 {
     DeviceState *dev;
     AppleSMCState *s;
@@ -383,6 +383,8 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     uint16_t battery_cell_voltage = 4200;
     int16_t battery_actual_amperage = 0x0;
     uint16_t battery_actual_voltage = battery_cell_voltage;
+
+    g_assert_cmphex(sram_size, <=, UINT32_MAX);
 
     dev = qdev_new(TYPE_APPLE_SMC_IOP);
     s = APPLE_SMC_IOP(dev);

@@ -151,7 +151,7 @@ struct SMCKeyData {
 };
 
 SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
-                               uint32_t protocol_version, uint32_t sram_size);
+                               uint32_t protocol_version, uint64_t sram_size);
 
 SMCKey *apple_smc_get_key(AppleSMCState *s, uint32_t key);
 SMCKeyData *apple_smc_get_key_data(AppleSMCState *s, uint32_t key);
