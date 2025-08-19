@@ -443,9 +443,9 @@ static const MemoryRegionOps ascv2_core_reg_ops = {
     .write = ascv2_core_reg_write,
     .read = ascv2_core_reg_read,
     .endianness = DEVICE_NATIVE_ENDIAN,
-    .impl.min_access_size = 8,
+    .impl.min_access_size = 4,
     .impl.max_access_size = 8,
-    .valid.min_access_size = 8,
+    .valid.min_access_size = 4,
     .valid.max_access_size = 8,
     .valid.unaligned = false,
 };
