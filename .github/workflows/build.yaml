@@ -19,6 +19,7 @@ jobs:
       - name: Build nettle 3.10.1
         run: |
           wget https://ftpmirror.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz
+          echo "fe9ff51cb1f2abb5e65a6b8c10a92da0ab5ab6eaf26e7fc2b675c45f1fb519b5 nettle-3.10.2.tar.gz" | sha256sum -c - || exit 1
           tar -xvf nettle-3.10.2.tar.gz
           cd nettle-3.10.2
           ./configure
