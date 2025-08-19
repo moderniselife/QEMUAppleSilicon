@@ -88,7 +88,6 @@
 
 #define ANS_TEXT_SIZE (0x124000)
 #define ANS_DATA_SIZE (0x3C00000)
-#define SMC_SRAM_SIZE (0x4000)
 #define SIO_TEXT_SIZE (0x1C000)
 #define SIO_DATA_SIZE (0xF8000)
 #define PANIC_SIZE (0x100000)
