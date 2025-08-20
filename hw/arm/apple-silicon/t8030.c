@@ -98,7 +98,7 @@
 #define AMCC_PLANE_STRIDE (0x40000)
 #define AMCC_LOWER(_p) (0x680 + (_p) * AMCC_PLANE_STRIDE)
 #define AMCC_UPPER(_p) (0x684 + (_p) * AMCC_PLANE_STRIDE)
-#define AMCC_REG(_tms, _x) *(uint32_t *)(&t8030_machine->amcc_reg[_x])
+#define AMCC_WREG32(_tms, _off, _val) stl_le_p(&_tms->amcc_reg[_off], _val)
 
 #define FUSE_ENABLED (0xA55AC33C)
 #define FUSE_DISABLED (0xA050C030)
@@ -391,8 +391,10 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     amcc_lower = info->sep_fw_addr;
     amcc_upper = amcc_lower + info->sep_fw_size - 1;
     for (int i = 0; i < 4; i++) {
-        AMCC_REG(t8030_machine, AMCC_LOWER(i)) = (amcc_lower - DRAM_BASE) >> 14;
-        AMCC_REG(t8030_machine, AMCC_UPPER(i)) = (amcc_upper - DRAM_BASE) >> 14;
+        AMCC_WREG32(t8030_machine, AMCC_LOWER(i),
+                    (amcc_lower - DRAM_BASE) >> 14);
+        AMCC_WREG32(t8030_machine, AMCC_UPPER(i),
+                    (amcc_upper - DRAM_BASE) >> 14);
     }
 
     // Kernel boot args
@@ -522,8 +524,10 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     amcc_lower = info->sep_fw_addr;
     amcc_upper = amcc_lower + info->sep_fw_size - 1;
     for (int i = 0; i < 4; i++) {
-        AMCC_REG(t8030_machine, AMCC_LOWER(i)) = (amcc_lower - DRAM_BASE) >> 14;
-        AMCC_REG(t8030_machine, AMCC_UPPER(i)) = (amcc_upper - DRAM_BASE) >> 14;
+        AMCC_WREG32(t8030_machine, AMCC_LOWER(i),
+                    (amcc_lower - DRAM_BASE) >> 14);
+        AMCC_WREG32(t8030_machine, AMCC_UPPER(i),
+                    (amcc_upper - DRAM_BASE) >> 14);
     }
 
     info->kern_boot_args_addr = phys_ptr;
