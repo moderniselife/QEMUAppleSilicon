@@ -4,10 +4,10 @@
 #include "qemu/bitops.h"
 #include "qemu/error-report.h"
 
-#define NOP 0xD503201F
-#define RET 0xD65F03C0
-#define RETAB 0xD65F0FFF
-#define PACIBSP 0xD503237F
+#define NOP (0xD503201F)
+#define RET (0xD65F03C0)
+#define RETAB (0xD65F0FFF)
+#define PACIBSP (0xD503237F)
 
 /// Precondition: insn must be masked.
 static uint32_t *find_next_insn(uint32_t *buffer, uint32_t num, uint32_t insn,
@@ -73,7 +73,7 @@ static void kpf_apfs_patches(ApplePfPatchset *patchset)
     };
     uint64_t masks[] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
 
-    // Allow mounting root as r/w
+    // Allow mounting root as R/W
     uint64_t matches2[] = {
         0x37700000, // tbnz w0, 0xE, *
         0xB94003A0, // ldr x*, [x29/sp, *]
