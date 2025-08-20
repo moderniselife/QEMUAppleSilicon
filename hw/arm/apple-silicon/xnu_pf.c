@@ -441,9 +441,7 @@ ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
     uint32_t loadc;
 
     for (i = 0; i < entryc; i++) {
-        if ((matches[i] & masks[i]) != matches[i]) {
-            error_report("Bad maskmatch: %s (index %u)", name, i);
-        }
+        g_assert_cmphex(matches[i] & masks[i], ==, matches[i]);
     }
 
     mm = g_malloc0(sizeof(ApplePfMaskMatch) + 16 * entryc);
