@@ -9,29 +9,39 @@
 #define RETAB 0xD65F0FFF
 #define PACIBSP 0xD503237F
 
-static uint32_t *find_next_insn(uint32_t *from, uint32_t num, uint32_t insn,
+/// Precondition: insn must be masked.
+static uint32_t *find_next_insn(uint32_t *buffer, uint32_t num, uint32_t insn,
                                 uint32_t mask)
 {
-    while (num) {
-        if ((*from & mask) == (insn & mask)) {
-            return from;
+    g_assert_nonnull(buffer);
+    g_assert_cmpuint(num, !=, 0);
+    g_assert_cmphex(mask, !=, 0);
+    g_assert_cmphex(insn & mask, ==, insn);
+
+    for (uint32_t i = 0; i < num; ++i) {
+        uint32_t *cur = buffer + i;
+        if ((ldl_le_p(cur) & mask) == insn) {
+            return cur;
         }
-        from += 1;
-        num -= 1;
     }
 
     return NULL;
 }
 
-static uint32_t *find_prev_insn(uint32_t *from, uint32_t num, uint32_t insn,
+/// Precondition: insn must be masked.
+static uint32_t *find_prev_insn(uint32_t *buffer, uint32_t num, uint32_t insn,
                                 uint32_t mask)
 {
-    while (num) {
-        if ((*from & mask) == (insn & mask)) {
-            return from;
+    g_assert_nonnull(buffer);
+    g_assert_cmpuint(num, !=, 0);
+    g_assert_cmphex(mask, !=, 0);
+    g_assert_cmphex(insn & mask, ==, insn);
+
+    for (uint32_t i = 0; i < num; ++i) {
+        uint32_t *cur = buffer - i;
+        if ((ldl_le_p(cur) & mask) == insn) {
+            return cur;
         }
-        from -= 1;
-        num -= 1;
     }
 
     return NULL;
