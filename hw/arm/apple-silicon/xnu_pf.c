@@ -55,6 +55,7 @@ static MachoHeader64 *xnu_pf_get_first_kext(MachoHeader64 *kheader)
         kmod_start_range = xnu_pf_section(kheader, "__PRELINK_TEXT", "__text");
         if (kmod_start_range == NULL) {
             error_report("Unsupported XNU.");
+            return NULL;
         }
         rv = (MachoHeader64 *)kmod_start_range->cacheable_base;
         g_free(kmod_start_range);
@@ -83,13 +84,14 @@ MachoHeader64 *xnu_pf_get_kext_header(MachoHeader64 *kheader,
 
     ApplePfRange *kmod_info_range =
         xnu_pf_section(kheader, "__PRELINK_INFO", "__kmod_info");
-    if (!kmod_info_range) {
+    if (kmod_info_range == NULL) {
         char kname[256];
         const char *prelinkinfo, *last_dict;
         ApplePfRange *kext_info_range =
             xnu_pf_section(kheader, "__PRELINK_INFO", "__info");
-        if (!kext_info_range) {
-            error_report("unsupported xnu");
+        if (kext_info_range == NULL) {
+            error_report("Unsupported XNU.");
+            return NULL;
         }
 
         prelinkinfo = strstr((const char *)kext_info_range->cacheable_base,
@@ -220,11 +222,12 @@ void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset)
 
     ApplePfRange *kmod_start_range =
         xnu_pf_section(kheader, "__PRELINK_INFO", "__kmod_start");
-    if (!kmod_start_range) {
+    if (kmod_start_range == NULL) {
         ApplePfRange *kext_text_exec_range =
             xnu_pf_section(kheader, "__PLK_TEXT_EXEC", "__text");
-        if (!kext_text_exec_range) {
-            error_report("unsupported xnu");
+        if (kext_text_exec_range == NULL) {
+            error_report("Unsupported XNU.");
+            return;
         }
         xnu_pf_apply(kext_text_exec_range, patchset);
         g_free(kext_text_exec_range);
