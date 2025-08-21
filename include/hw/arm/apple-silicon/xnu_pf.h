@@ -27,7 +27,6 @@ typedef bool (*xnu_pf_patch_callback)(ApplePfPatch *patch,
 
 typedef struct {
     ApplePfPatch *patch_head;
-    uint64_t p0;
     uint8_t accesstype;
     bool is_required;
 } ApplePfPatchset;
