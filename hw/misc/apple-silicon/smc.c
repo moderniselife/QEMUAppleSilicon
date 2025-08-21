@@ -329,17 +329,10 @@ static void apple_smc_handle_key_endpoint(void *opaque, const uint32_t ep,
 static void ascv2_core_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                  unsigned size)
 {
-    qemu_log_mask(LOG_UNIMP,
-                  "SMC: AppleASCWrapV2 core reg WRITE @ 0x" HWADDR_FMT_plx
-                  " value: 0x" HWADDR_FMT_plx "\n",
-                  addr, data);
 }
 
 static uint64_t ascv2_core_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    qemu_log_mask(LOG_UNIMP,
-                  "SMC: AppleASCWrapV2 core reg READ @ 0x" HWADDR_FMT_plx "\n",
-                  addr);
     return 0;
 }
 

@@ -80,15 +80,10 @@ struct AppleANSState {
 static void ascv2_core_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                  unsigned size)
 {
-    DPRINTF("ANS2: AppleASCWrapV2 core reg WRITE @ 0x" HWADDR_FMT_plx
-            " value: 0x" HWADDR_FMT_plx "\n",
-            addr, data);
 }
 
 static uint64_t ascv2_core_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    DPRINTF("ANS2: AppleASCWrapV2 core reg READ @ 0x" HWADDR_FMT_plx "\n",
-            addr);
     return 0;
 }
 

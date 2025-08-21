@@ -421,21 +421,10 @@ AppleSIODMAEndpoint *apple_sio_get_endpoint_from_node(AppleSIOState *s,
 static void ascv2_core_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                  unsigned size)
 {
-#ifdef DEBUG_SIO
-    qemu_log_mask(LOG_UNIMP,
-                  "SIO: AppleASCWrapV2 core reg WRITE @ 0x" HWADDR_FMT_plx
-                  " value: 0x" HWADDR_FMT_plx "\n",
-                  addr, data);
-#endif
 }
 
 static uint64_t ascv2_core_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-#ifdef DEBUG_SIO
-    qemu_log_mask(LOG_UNIMP,
-                  "SIO: AppleASCWrapV2 core reg READ @ 0x" HWADDR_FMT_plx "\n",
-                  addr);
-#endif
     return 0;
 }
 
