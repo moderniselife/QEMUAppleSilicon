@@ -25,16 +25,18 @@ struct ApplePfPatch {
 typedef bool (*xnu_pf_patch_callback)(ApplePfPatch *patch,
                                       void *cacheable_stream);
 
+typedef enum {
+    XNU_PF_ACCESS_8BIT,
+    XNU_PF_ACCESS_16BIT,
+    XNU_PF_ACCESS_32BIT,
+    XNU_PF_ACCESS_64BIT,
+} XnuPfPatchsetAccessType;
+
 typedef struct {
     ApplePfPatch *patch_head;
-    uint8_t accesstype;
+    XnuPfPatchsetAccessType access_type;
     bool is_required;
 } ApplePfPatchset;
-
-#define XNU_PF_ACCESS_8BIT (0x8)
-#define XNU_PF_ACCESS_16BIT (0x10)
-#define XNU_PF_ACCESS_32BIT (0x20)
-#define XNU_PF_ACCESS_64BIT (0x40)
 
 ApplePfRange *xnu_pf_range_from_va(uint64_t va, uint64_t size);
 
@@ -60,7 +62,7 @@ ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
 
 void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset);
 
-ApplePfPatchset *xnu_pf_patchset_create(uint8_t pf_accesstype);
+ApplePfPatchset *xnu_pf_patchset_create(XnuPfPatchsetAccessType access_type);
 
 void xnu_pf_patchset_destroy(ApplePfPatchset *patchset);
 

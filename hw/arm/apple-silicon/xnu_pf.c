@@ -262,10 +262,10 @@ void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset)
     }
 }
 
-ApplePfPatchset *xnu_pf_patchset_create(uint8_t pf_accesstype)
+ApplePfPatchset *xnu_pf_patchset_create(XnuPfPatchsetAccessType access_type)
 {
     ApplePfPatchset *r = g_new0(ApplePfPatchset, 1);
-    r->accesstype = pf_accesstype;
+    r->access_type = access_type;
     r->is_required = true;
     return r;
 }
@@ -630,7 +630,7 @@ static inline void xnu_pf_apply_64(ApplePfRange *range,
 
 void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset)
 {
-    switch (patchset->accesstype) {
+    switch (patchset->access_type) {
     case XNU_PF_ACCESS_8BIT:
         xnu_pf_apply_8(range, patchset);
         break;
@@ -644,7 +644,7 @@ void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset)
         xnu_pf_apply_64(range, patchset);
         break;
     default:
-        break;
+        g_assert_not_reached();
     }
 
     if (patchset->is_required) {
