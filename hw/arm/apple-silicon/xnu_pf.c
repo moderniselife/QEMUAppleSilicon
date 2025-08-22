@@ -455,8 +455,7 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
                                  ApplePfRange *range, void *data, size_t datasz,
                                  xnu_pf_patch_callback callback)
 {
-    struct XnuPfPtrToDatamatch *mm =
-        g_malloc0(sizeof(struct XnuPfPtrToDatamatch));
+    XnuPfPtrToDatamatch *mm = g_malloc0(sizeof(XnuPfPtrToDatamatch));
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_ptr_to_data_match;
