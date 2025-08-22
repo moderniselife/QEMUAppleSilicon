@@ -385,15 +385,15 @@ static void xnu_pf_maskmatch_match(ApplePfMaskMatch *patch,
     }
 }
 
-struct XnuPfPtrToDatamatch {
+typedef struct {
     ApplePfPatch patch;
     void *data;
     size_t datasz;
     uint64_t slide;
     ApplePfRange *range;
-};
+} XnuPfPtrToDatamatch;
 
-static void xnu_pf_ptr_to_data_match(struct XnuPfPtrToDatamatch *patch,
+static void xnu_pf_ptr_to_data_match(XnuPfPtrToDatamatch *patch,
                                      XnuPfPatchsetAccessType access_type,
                                      void *preread, void *cacheable_stream)
 {
@@ -429,7 +429,6 @@ ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
     }
 
     mm = g_malloc0(sizeof(ApplePfMaskMatch) + 16 * entryc);
-    memset(mm, 0, sizeof(ApplePfMaskMatch));
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_maskmatch_match;
@@ -458,20 +457,15 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
 {
     struct XnuPfPtrToDatamatch *mm =
         g_malloc0(sizeof(struct XnuPfPtrToDatamatch));
-
-    memset(mm, 0, sizeof(struct XnuPfPtrToDatamatch));
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_ptr_to_data_match;
-
     mm->slide = slide;
     mm->range = range;
     mm->data = data;
     mm->datasz = datasz;
-
     mm->patch.next_patch = patchset->patch_head;
     patchset->patch_head = &mm->patch;
-
     return &mm->patch;
 }
 
