@@ -277,7 +277,6 @@ typedef struct {
 } ApplePfMaskMatch;
 
 static inline bool xnu_pf_maskmatch_match_8(ApplePfMaskMatch *patch,
-                                            uint8_t access_type,
                                             uint8_t *preread,
                                             uint8_t *cacheable_stream)
 {
@@ -300,7 +299,6 @@ static inline bool xnu_pf_maskmatch_match_8(ApplePfMaskMatch *patch,
 }
 
 static inline bool xnu_pf_maskmatch_match_16(ApplePfMaskMatch *patch,
-                                             uint8_t access_type,
                                              uint16_t *preread,
                                              uint16_t *cacheable_stream)
 {
@@ -323,7 +321,6 @@ static inline bool xnu_pf_maskmatch_match_16(ApplePfMaskMatch *patch,
 }
 
 static inline bool xnu_pf_maskmatch_match_32(ApplePfMaskMatch *patch,
-                                             uint8_t access_type,
                                              uint32_t *preread,
                                              uint32_t *cacheable_stream)
 {
@@ -345,7 +342,6 @@ static inline bool xnu_pf_maskmatch_match_32(ApplePfMaskMatch *patch,
 }
 
 static inline bool xnu_pf_maskmatch_match_64(ApplePfMaskMatch *patch,
-                                             uint8_t access_type,
                                              uint64_t *preread,
                                              uint64_t *cacheable_stream)
 {
@@ -367,27 +363,24 @@ static inline bool xnu_pf_maskmatch_match_64(ApplePfMaskMatch *patch,
     return true;
 }
 
-static void xnu_pf_maskmatch_match(ApplePfMaskMatch *patch, uint8_t access_type,
+static void xnu_pf_maskmatch_match(ApplePfMaskMatch *patch,
+                                   XnuPfPatchsetAccessType access_type,
                                    void *preread, void *cacheable_stream)
 {
     bool val = false;
 
     switch (access_type) {
     case XNU_PF_ACCESS_8BIT:
-        val = xnu_pf_maskmatch_match_8(patch, access_type, preread,
-                                       cacheable_stream);
+        val = xnu_pf_maskmatch_match_8(patch, preread, cacheable_stream);
         break;
     case XNU_PF_ACCESS_16BIT:
-        val = xnu_pf_maskmatch_match_16(patch, access_type, preread,
-                                        cacheable_stream);
+        val = xnu_pf_maskmatch_match_16(patch, preread, cacheable_stream);
         break;
     case XNU_PF_ACCESS_32BIT:
-        val = xnu_pf_maskmatch_match_32(patch, access_type, preread,
-                                        cacheable_stream);
+        val = xnu_pf_maskmatch_match_32(patch, preread, cacheable_stream);
         break;
     case XNU_PF_ACCESS_64BIT:
-        val = xnu_pf_maskmatch_match_64(patch, access_type, preread,
-                                        cacheable_stream);
+        val = xnu_pf_maskmatch_match_64(patch, preread, cacheable_stream);
         break;
     default:
         break;
@@ -400,7 +393,7 @@ static void xnu_pf_maskmatch_match(ApplePfMaskMatch *patch, uint8_t access_type,
     }
 }
 
-struct xnu_pf_ptr_to_datamatch {
+struct XnuPfPtrToDatamatch {
     ApplePfPatch patch;
     void *data;
     size_t datasz;
@@ -408,9 +401,9 @@ struct xnu_pf_ptr_to_datamatch {
     ApplePfRange *range;
 };
 
-static void xnu_pf_ptr_to_data_match(struct xnu_pf_ptr_to_datamatch *patch,
-                                     uint8_t access_type, void *preread,
-                                     void *cacheable_stream)
+static void xnu_pf_ptr_to_data_match(struct XnuPfPtrToDatamatch *patch,
+                                     XnuPfPatchsetAccessType access_type,
+                                     void *preread, void *cacheable_stream)
 {
     uint64_t pointer = *(uint64_t *)preread;
 
@@ -473,10 +466,10 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
                                  ApplePfRange *range, void *data, size_t datasz,
                                  bool required, xnu_pf_patch_callback callback)
 {
-    struct xnu_pf_ptr_to_datamatch *mm =
-        g_malloc0(sizeof(struct xnu_pf_ptr_to_datamatch));
+    struct XnuPfPtrToDatamatch *mm =
+        g_malloc0(sizeof(struct XnuPfPtrToDatamatch));
 
-    memset(mm, 0, sizeof(struct xnu_pf_ptr_to_datamatch));
+    memset(mm, 0, sizeof(struct XnuPfPtrToDatamatch));
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_ptr_to_data_match;

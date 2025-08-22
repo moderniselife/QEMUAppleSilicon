@@ -10,13 +10,20 @@ typedef struct {
 
 typedef struct ApplePfPatch ApplePfPatch;
 
+typedef enum {
+    XNU_PF_ACCESS_8BIT,
+    XNU_PF_ACCESS_16BIT,
+    XNU_PF_ACCESS_32BIT,
+    XNU_PF_ACCESS_64BIT,
+} XnuPfPatchsetAccessType;
+
 struct ApplePfPatch {
     bool (*pf_callback)(ApplePfPatch *patch, void *cacheable_stream);
     bool is_required;
     bool has_fired;
     bool should_match;
-    void (*pf_match)(ApplePfPatch *patch, uint8_t access_type, void *preread,
-                     void *cacheable_stream);
+    void (*pf_match)(ApplePfPatch *patch, XnuPfPatchsetAccessType access_type,
+                     void *preread, void *cacheable_stream);
     ApplePfPatch *next_patch;
     uint8_t pf_data[0];
     const char *name;
@@ -24,13 +31,6 @@ struct ApplePfPatch {
 
 typedef bool (*xnu_pf_patch_callback)(ApplePfPatch *patch,
                                       void *cacheable_stream);
-
-typedef enum {
-    XNU_PF_ACCESS_8BIT,
-    XNU_PF_ACCESS_16BIT,
-    XNU_PF_ACCESS_32BIT,
-    XNU_PF_ACCESS_64BIT,
-} XnuPfPatchsetAccessType;
 
 typedef struct {
     ApplePfPatch *patch_head;
