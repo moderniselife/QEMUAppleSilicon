@@ -532,7 +532,7 @@ static void aes_reg_write(void *opaque, hwaddr addr, uint64_t data,
         }
 
         if (s->data && s->data_len <= s->data_read) {
-            AESCommand *cmd = g_malloc0(sizeof(AESCommand));
+            AESCommand *cmd = g_new0(AESCommand, 1);
             cmd->command = s->command;
             cmd->data = s->data;
             cmd->data_len = s->data_len;
