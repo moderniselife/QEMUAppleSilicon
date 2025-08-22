@@ -215,7 +215,6 @@ ApplePfRange *xnu_pf_get_actual_text_exec(MachoHeader64 *header)
 
 void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset)
 {
-    bool is_required;
     uint64_t *start;
     uint32_t count;
     uint32_t i;
@@ -234,9 +233,6 @@ void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset)
         return;
     }
 
-    is_required = patchset->is_required;
-    patchset->is_required = false;
-
     start = (uint64_t *)(kmod_start_range->cacheable_base);
     count = kmod_start_range->size / 8;
     for (i = 0; i < count; i++) {
@@ -251,13 +247,10 @@ void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset)
     }
     g_free(kmod_start_range);
 
-    patchset->is_required = is_required;
-    if (is_required) {
-        for (ApplePfPatch *patch = patchset->patch_head; patch;
-             patch = patch->next_patch) {
-            if (patch->is_required && !patch->has_fired) {
-                error_report("Missing patch: %s", patch->name);
-            }
+    for (ApplePfPatch *patch = patchset->patch_head; patch;
+         patch = patch->next_patch) {
+        if (!patch->has_fired) {
+            error_report("`%s` patch did not apply", patch->name);
         }
     }
 }
@@ -266,7 +259,6 @@ ApplePfPatchset *xnu_pf_patchset_create(XnuPfPatchsetAccessType access_type)
 {
     ApplePfPatchset *r = g_new0(ApplePfPatchset, 1);
     r->access_type = access_type;
-    r->is_required = true;
     return r;
 }
 
@@ -426,8 +418,7 @@ static void xnu_pf_ptr_to_data_match(struct XnuPfPtrToDatamatch *patch,
 
 ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
                                uint64_t *matches, uint64_t *masks,
-                               uint32_t entryc, bool required,
-                               xnu_pf_patch_callback callback)
+                               uint32_t entryc, xnu_pf_patch_callback callback)
 {
     uint32_t i;
     ApplePfMaskMatch *mm;
@@ -442,7 +433,6 @@ ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_maskmatch_match;
-    mm->patch.is_required = required;
     mm->patch.name = name;
     mm->pair_count = entryc;
 
@@ -464,7 +454,7 @@ ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
 
 ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
                                  ApplePfRange *range, void *data, size_t datasz,
-                                 bool required, xnu_pf_patch_callback callback)
+                                 xnu_pf_patch_callback callback)
 {
     struct XnuPfPtrToDatamatch *mm =
         g_malloc0(sizeof(struct XnuPfPtrToDatamatch));
@@ -473,7 +463,6 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_ptr_to_data_match;
-    mm->patch.is_required = required;
 
     mm->slide = slide;
     mm->range = range;
@@ -488,19 +477,11 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
 
 void xnu_pf_disable_patch(ApplePfPatch *patch)
 {
-    if (!patch->should_match) {
-        return;
-    }
-
     patch->should_match = false;
 }
 
 void xnu_pf_enable_patch(ApplePfPatch *patch)
 {
-    if (patch->should_match) {
-        return;
-    }
-
     patch->should_match = true;
 }
 
@@ -640,12 +621,10 @@ void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset)
         g_assert_not_reached();
     }
 
-    if (patchset->is_required) {
-        for (ApplePfPatch *patch = patchset->patch_head; patch;
-             patch = patch->next_patch) {
-            if (patch->is_required && !patch->has_fired) {
-                error_report("Missing patch: %s", patch->name);
-            }
+    for (ApplePfPatch *patch = patchset->patch_head; patch;
+         patch = patch->next_patch) {
+        if (!patch->has_fired) {
+            error_report("`%s` patch did not apply", patch->name);
         }
     }
 }

@@ -19,7 +19,6 @@ typedef enum {
 
 struct ApplePfPatch {
     bool (*pf_callback)(ApplePfPatch *patch, void *cacheable_stream);
-    bool is_required;
     bool has_fired;
     bool should_match;
     void (*pf_match)(ApplePfPatch *patch, XnuPfPatchsetAccessType access_type,
@@ -35,7 +34,6 @@ typedef bool (*xnu_pf_patch_callback)(ApplePfPatch *patch,
 typedef struct {
     ApplePfPatch *patch_head;
     XnuPfPatchsetAccessType access_type;
-    bool is_required;
 } ApplePfPatchset;
 
 ApplePfRange *xnu_pf_range_from_va(uint64_t va, uint64_t size);
@@ -53,12 +51,11 @@ ApplePfRange *xnu_pf_get_actual_text_exec(MachoHeader64 *header);
 
 ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
                                  ApplePfRange *range, void *data, size_t datasz,
-                                 bool required, xnu_pf_patch_callback callback);
+                                 xnu_pf_patch_callback callback);
 
 ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
                                uint64_t *matches, uint64_t *masks,
-                               uint32_t entryc, bool required,
-                               xnu_pf_patch_callback callback);
+                               uint32_t entryc, xnu_pf_patch_callback callback);
 
 void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset);
 

@@ -89,11 +89,11 @@ static void kpf_apfs_patches(ApplePfPatchset *patchset)
     };
 
     xnu_pf_maskmatch(patchset, "handle_eval_rootauth", matches, masks,
-                     sizeof(masks) / sizeof(uint64_t), false,
+                     sizeof(masks) / sizeof(uint64_t),
                      (void *)kpf_apfs_rootauth);
 
     xnu_pf_maskmatch(patchset, "apfs_vfsop_mount", matches2, masks2,
-                     sizeof(masks2) / sizeof(uint64_t), false,
+                     sizeof(masks2) / sizeof(uint64_t),
                      (void *)kpf_apfs_vfsop_mount);
 }
 
@@ -166,7 +166,7 @@ static void kpf_amfi_patch(ApplePfPatchset *patchset)
     };
     uint64_t masks[] = { 0xFFFFFF00, 0xFF000000, 0xFF000000 };
     xnu_pf_maskmatch(patchset, "amfi_patch", matches, masks,
-                     sizeof(matches) / sizeof(uint64_t), true,
+                     sizeof(matches) / sizeof(uint64_t),
                      (void *)kpf_amfi_callback);
 }
 
@@ -194,7 +194,7 @@ static void kpf_trustcache_patch(ApplePfPatchset *patchset)
         0xFFFFFFC0,
     };
     xnu_pf_maskmatch(patchset, "trustcache16", matches, masks,
-                     sizeof(matches) / sizeof(uint64_t), true,
+                     sizeof(matches) / sizeof(uint64_t),
                      (void *)kpf_trustcache_callback);
 }
 
@@ -222,7 +222,7 @@ static void kpf_amfi_kext_patches(ApplePfPatchset *patchset)
         0xFFF8001F,
     };
     xnu_pf_maskmatch(patchset, "amfi_sha1", i_matches, i_masks,
-                     sizeof(i_matches) / sizeof(uint64_t), true,
+                     sizeof(i_matches) / sizeof(uint64_t),
                      (void *)kpf_amfi_sha1);
 }
 
@@ -274,11 +274,11 @@ static void kpf_mac_mount_patch(ApplePfPatchset *patchset)
     };
 
     xnu_pf_maskmatch(patchset, "mac_mount_patch1", matches, masks,
-                     sizeof(matches) / sizeof(uint64_t), false,
+                     sizeof(matches) / sizeof(uint64_t),
                      (void *)kpf_mac_mount_callback);
     matches[0] = 0x5283FFC9; // movz w9, 0x1FFE
     xnu_pf_maskmatch(patchset, "mac_mount_patch2", matches, masks,
-                     sizeof(matches) / sizeof(uint64_t), false,
+                     sizeof(matches) / sizeof(uint64_t),
                      (void *)kpf_mac_mount_callback);
 }
 
