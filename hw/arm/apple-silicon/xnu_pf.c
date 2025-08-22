@@ -5,7 +5,7 @@
 
 ApplePfRange *xnu_pf_range_from_va(uint64_t va, uint64_t size)
 {
-    ApplePfRange *range = g_malloc0(sizeof(ApplePfRange));
+    ApplePfRange *range = g_new0(ApplePfRange, 1);
     range->va = va;
     range->size = size;
     range->cacheable_base = (uint8_t *)(va - g_virt_base + g_phys_base);
@@ -455,7 +455,7 @@ ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
                                  ApplePfRange *range, void *data, size_t datasz,
                                  xnu_pf_patch_callback callback)
 {
-    XnuPfPtrToDatamatch *mm = g_malloc0(sizeof(XnuPfPtrToDatamatch));
+    XnuPfPtrToDatamatch *mm = g_new0(XnuPfPtrToDatamatch, 1);
     mm->patch.should_match = true;
     mm->patch.pf_callback = (void *)callback;
     mm->patch.pf_match = (void *)xnu_pf_ptr_to_data_match;
