@@ -28,10 +28,11 @@ typedef struct {
     hwaddr length;
     /// Guaranteed to be an accessible host pointer.
     void *ptr;
+    const char *name;
 } CkPfRange;
 
 /// Convert a XNU virtual address to a patch finder range.
-CkPfRange *ck_pf_range_from_xnu_va(hwaddr base, hwaddr size);
+CkPfRange *ck_pf_range_from_xnu_va(const char *name, hwaddr base, hwaddr size);
 
 /// Find patch finder range by segment inside a Mach-o.
 CkPfRange *ck_pf_find_segment(MachoHeader64 *hdr, const char *name);
