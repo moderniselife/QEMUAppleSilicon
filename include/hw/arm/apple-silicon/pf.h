@@ -48,10 +48,10 @@ MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *hdr,
 
 /// Precondition: `insn` must be masked.
 void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask);
+                           uint32_t mask, uint32_t skip);
 /// Precondition: `insn` must be masked.
 void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask);
+                           uint32_t mask, uint32_t skip);
 
 /// Callback function prototype. `ctx` may be null.
 typedef bool (*CkPfCallback)(void *ctx, uint8_t *buffer);

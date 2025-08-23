@@ -261,14 +261,18 @@ void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
 }
 
 void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask)
+                           uint32_t mask, uint32_t skip)
 {
     g_assert_cmphex(insn & mask, ==, insn);
 
     for (uint32_t i = 0; i < num; ++i) {
         uint8_t *cur = buffer + i * sizeof(uint32_t);
         if ((ldl_le_p(cur) & mask) == insn) {
-            return cur;
+            if (skip == 0) {
+                return cur;
+            } else {
+                --skip;
+            }
         }
     }
 
@@ -276,14 +280,18 @@ void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
 }
 
 void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask)
+                           uint32_t mask, uint32_t skip)
 {
     g_assert_cmphex(insn & mask, ==, insn);
 
     for (uint32_t i = 0; i < num; ++i) {
         void *cur = buffer - (i * sizeof(uint32_t));
         if ((ldl_le_p(cur) & mask) == insn) {
-            return cur;
+            if (skip == 0) {
+                return cur;
+            } else {
+                --skip;
+            }
         }
     }
 

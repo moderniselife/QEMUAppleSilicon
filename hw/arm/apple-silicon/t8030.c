@@ -169,12 +169,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     // AppleSEPManager::_initTimeoutMultiplier 'sim' -> '  m'
     *(uint32_t *)vtop_slid(0xFFFFFFF008B569E0) = cpu_to_le32(0x52840408);
 
-    // Disable AMX
-    // _gAMXVersion = 0
-    // __cpu_capabilities | 0x800 (ucnormal)
-    *(uint32_t *)vtop_slid(0xFFFFFFF007B64494) = cpu_to_le32(0x5280000A);
-    *(uint32_t *)vtop_slid(0xFFFFFFF007B644A4) = cpu_to_le32(0x52810009);
-
 #ifndef ENABLE_SEP
     // Make all AppleSEPKeyStoreUserClient requests do nothing but return
     // success

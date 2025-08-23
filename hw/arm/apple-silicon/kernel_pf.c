@@ -17,7 +17,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "hw/arm/apple-silicon/mem.h"
 #include "hw/arm/apple-silicon/pf.h"
 #include "qemu/bitops.h"
 #include "qemu/error-report.h"
@@ -64,20 +63,20 @@ static bool ck_kernel_pf_tc_callback(void *ctx, uint8_t *buffer)
         return false;
     }
 
-    void *ldrb = ck_pf_find_next_insn(buffer, 256, 0x39402C00, 0xFFFFFC00);
+    void *ldrb = ck_pf_find_next_insn(buffer, 256, 0x39402C00, 0xFFFFFC00, 0);
     uint32_t cdhash_param = extract32(ldl_le_p(ldrb), 5, 5);
     void *frame;
     void *start = buffer;
     bool pac;
 
-    frame = ck_pf_find_prev_insn(buffer, 10, 0x910003FD, 0xFF8003FF);
+    frame = ck_pf_find_prev_insn(buffer, 10, 0x910003FD, 0xFF8003FF, 0);
     if (frame == NULL) {
         info_report("%s: Found AMFI (Leaf)", __func__);
     } else {
         info_report("%s: Found AMFI (Routine)", __func__);
-        start = ck_pf_find_prev_insn(frame, 10, 0xA9A003E0, 0xFFE003E0);
+        start = ck_pf_find_prev_insn(frame, 10, 0xA9A003E0, 0xFFE003E0, 0);
         if (start == NULL) {
-            start = ck_pf_find_prev_insn(frame, 10, 0xD10003FF, 0xFF8003FF);
+            start = ck_pf_find_prev_insn(frame, 10, 0xD10003FF, 0xFF8003FF, 0);
             if (start == NULL) {
                 error_report("%s: Failed to find AMFI start", __func__);
                 return false;
@@ -85,11 +84,11 @@ static bool ck_kernel_pf_tc_callback(void *ctx, uint8_t *buffer)
         }
     }
 
-    pac = ck_pf_find_prev_insn(start, 5, PACIBSP, 0xFFFFFFFF) != NULL;
+    pac = ck_pf_find_prev_insn(start, 5, PACIBSP, 0xFFFFFFFF, 0) != NULL;
     switch (cdhash_param) {
     case 0: {
         // adrp x8, ?
-        void *adrp = ck_pf_find_prev_insn(start, 10, 0x90000008, 0x9F00001F);
+        void *adrp = ck_pf_find_prev_insn(start, 10, 0x90000008, 0x9F00001F, 0);
         if (adrp != NULL) {
             start = adrp;
         }
@@ -127,7 +126,7 @@ static void ck_kernel_pf_tc_patch(CkPfRange *range)
 
 static bool ck_kernel_pf_tc_ios16_callback(void *ctx, uint8_t *buffer)
 {
-    void *start = ck_pf_find_prev_insn(buffer, 100, PACIBSP, 0xFFFFFFFF);
+    void *start = ck_pf_find_prev_insn(buffer, 100, PACIBSP, 0xFFFFFFFF, 0);
 
     if (start == NULL) {
         return false;
@@ -150,8 +149,8 @@ static void ck_kernel_pf_tc_ios16_patch(CkPfRange *range)
 
 static bool ck_kernel_pf_amfi_sha1(void *ctx, uint8_t *buffer)
 {
-    void *cmp = ck_pf_find_next_insn(buffer, 0x10, 0x7100081F,
-                                     0xFFFFFFFF); // cmp w0, 2
+    void *cmp = ck_pf_find_next_insn(buffer, 0x10, 0x7100081F, 0xFFFFFFFF,
+                                     0); // cmp w0, 2
 
     if (cmp == NULL) {
         error_report("%s: failed to find cmp", __func__);
@@ -173,9 +172,10 @@ static void ck_kernel_pf_amfi_kext_patches(CkPfRange *range)
 static bool ck_kernel_pf_mac_mount_callback(void *ctx, uint8_t *buffer)
 {
     void *mac_mount =
-        ck_pf_find_prev_insn(buffer, 0x40, 0x37280000, 0xFFFE0000);
+        ck_pf_find_prev_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
     if (mac_mount == NULL) {
-        mac_mount = ck_pf_find_next_insn(buffer, 0x40, 0x37280000, 0xFFFE0000);
+        mac_mount =
+            ck_pf_find_next_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
         if (mac_mount == NULL) {
             error_report("%s: failed to find nop point", __func__);
             return false;
@@ -186,9 +186,10 @@ static bool ck_kernel_pf_mac_mount_callback(void *ctx, uint8_t *buffer)
     stl_le_p(mac_mount, NOP);
 
     // Search for ldrb w8, [x?, 0x71]
-    mac_mount = ck_pf_find_prev_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F);
+    mac_mount = ck_pf_find_prev_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
     if (mac_mount == NULL) {
-        mac_mount = ck_pf_find_next_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F);
+        mac_mount =
+            ck_pf_find_next_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
         if (mac_mount == NULL) {
             error_report("%s: failed to find xzr point", __func__);
             return false;
@@ -229,6 +230,30 @@ static void ck_kernel_pf_kprintf_patch(CkPfRange *range)
                        replace, NULL, 8, sizeof(replace));
 }
 
+static bool ck_kernel_pf_amx_callback(void *ctx, uint8_t *buffer)
+{
+    stl_le_p(buffer, 0x52810009); // mov w9, #0x800
+    void *amx_ver_str =
+        ck_pf_find_prev_insn(buffer, 10, 0xB800000A, 0xFEC0001F, 1);
+    if (amx_ver_str == NULL) {
+        error_report("%s: Failed to find gAMXVersion store.", __func__);
+        return false;
+    }
+    stl_le_p(amx_ver_str, NOP);
+    return true;
+}
+
+static void ck_kernel_pf_amx_patch(CkPfRange *range)
+{
+    uint8_t find[] = {
+        0xE9, 0x83, 0x05, 0x32, // mov w9, #0x8000800
+        0x09, 0x00, 0x00, 0xAA, // orr x9, x?, x?
+    };
+    uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF };
+    ck_pf_find_callback(range, "disable AMX", find, mask, sizeof(find),
+                        ck_kernel_pf_amx_callback);
+}
+
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
     g_autofree CkPfRange *text_exec;
@@ -251,6 +276,7 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     ck_kernel_pf_tc_patch(text_exec);
     ck_kernel_pf_mac_mount_patch(text_exec);
     ck_kernel_pf_kprintf_patch(text_exec);
+    ck_kernel_pf_amx_patch(text_exec);
 
     ppltext_exec = ck_pf_find_section(hdr, "__PPLTEXT", "__text");
     if (ppltext_exec == NULL) {
