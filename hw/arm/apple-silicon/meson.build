@@ -12,11 +12,9 @@ arm_common_ss.add(when: 'CONFIG_APPLE_SOC', if_true: files(
     'mt-spi.c',
     'sep-sim.c',
     'sep.c',
-    'xnu_kpf.c',
-    'xnu_pf.c',
+    'kernel_pf.c',
+    'pf.c',
     'lm-backlight.c',
-))
-arm_ss.add(when: 'CONFIG_APPLE_SOC', if_true: files(
     's8000.c',
     't8030.c',
 ))

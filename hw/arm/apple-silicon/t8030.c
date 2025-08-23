@@ -26,12 +26,12 @@
 #include "hw/arm/apple-silicon/lm-backlight.h"
 #include "hw/arm/apple-silicon/mem.h"
 #include "hw/arm/apple-silicon/mt-spi.h"
+#include "hw/arm/apple-silicon/pf.h"
 #include "hw/arm/apple-silicon/sart.h"
 #include "hw/arm/apple-silicon/sep-sim.h"
 #include "hw/arm/apple-silicon/sep.h"
 #include "hw/arm/apple-silicon/t8030-config.c.inc"
 #include "hw/arm/apple-silicon/t8030.h"
-#include "hw/arm/apple-silicon/xnu_pf.h"
 #include "hw/audio/apple-silicon/aop-audio.h"
 #include "hw/audio/apple-silicon/cs35l27.h"
 #include "hw/audio/apple-silicon/cs42l77.h"
@@ -165,9 +165,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
 
     const uint32_t nop = cpu_to_le32(0xD503201F);
     const uint32_t ret = cpu_to_le32(0xD65F03C0);
-
-    // disable_kprintf_output = 0;
-    *(uint32_t *)vtop_slid(0xFFFFFFF0077142C8) = 0;
 
     // AppleSEPManager::_initTimeoutMultiplier 'sim' -> '  m'
     *(uint32_t *)vtop_slid(0xFFFFFFF008B569E0) = cpu_to_le32(0x52840408);
@@ -406,13 +403,13 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     info->device_tree_addr = phys_ptr;
     dtb_va = ptov_static(info->device_tree_addr);
     phys_ptr += info->device_tree_size;
-    info_report("Device tree physical base: 0x" TARGET_FMT_lx,
+    info_report("Device tree physical base: 0x" HWADDR_FMT_plx,
                 info->device_tree_addr);
-    info_report("Device tree virtual base: 0x" TARGET_FMT_lx, dtb_va);
-    info_report("Device tree size: 0x" TARGET_FMT_lx, info->device_tree_size);
+    info_report("Device tree virtual base: 0x" HWADDR_FMT_plx, dtb_va);
+    info_report("Device tree size: 0x" HWADDR_FMT_plx, info->device_tree_size);
 
     mem_size = carveout_alloc_finalise(ca);
-    info_report("mem_size: 0x%" PRIx64 "", mem_size);
+    info_report("mem_size: 0x" HWADDR_FMT_plx, mem_size);
 
     macho_load_dtb(t8030_machine->device_tree, &address_space_memory,
                    get_system_memory(), info);
@@ -486,11 +483,11 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
         arm_load_macho(hdr, &address_space_memory, get_system_memory(),
                        memory_map, phys_ptr, g_virt_slide);
 
-    info_report("Kernel virtual base: 0x" TARGET_FMT_lx, g_virt_base);
-    info_report("Kernel physical base: 0x" TARGET_FMT_lx, g_phys_base);
-    info_report("Kernel virtual slide: 0x" TARGET_FMT_lx, g_virt_slide);
-    info_report("Kernel physical slide: 0x" TARGET_FMT_lx, g_phys_slide);
-    info_report("Kernel entry point: 0x" TARGET_FMT_lx, info->kern_entry);
+    info_report("Kernel virtual base: 0x" HWADDR_FMT_plx, g_virt_base);
+    info_report("Kernel physical base: 0x" HWADDR_FMT_plx, g_phys_base);
+    info_report("Kernel virtual slide: 0x" HWADDR_FMT_plx, g_virt_slide);
+    info_report("Kernel physical slide: 0x" HWADDR_FMT_plx, g_phys_slide);
+    info_report("Kernel entry point: 0x" HWADDR_FMT_plx, info->kern_entry);
 
     virt_end += g_virt_slide;
     phys_ptr = vtop_static(ROUND_UP_16K(virt_end));
@@ -2804,8 +2801,8 @@ static void t8030_machine_init(MachineState *machine)
     }
 
     macho_highest_lowest(hdr, &kernel_low, &kernel_high);
-    info_report("Kernel virtual low: 0x" TARGET_FMT_lx, kernel_low);
-    info_report("Kernel virtual high: 0x" TARGET_FMT_lx, kernel_high);
+    info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
+    info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
 
     g_virt_base = kernel_low;
     g_phys_base = (hwaddr)macho_get_buffer(hdr);

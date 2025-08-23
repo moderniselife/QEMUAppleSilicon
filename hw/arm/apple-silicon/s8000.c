@@ -23,10 +23,10 @@
 #include "hw/arm/apple-silicon/dart.h"
 #include "hw/arm/apple-silicon/lm-backlight.h"
 #include "hw/arm/apple-silicon/mem.h"
+#include "hw/arm/apple-silicon/pf.h"
 #include "hw/arm/apple-silicon/s8000-config.c.inc"
 #include "hw/arm/apple-silicon/s8000.h"
 #include "hw/arm/apple-silicon/sep-sim.h"
-#include "hw/arm/apple-silicon/xnu_pf.h"
 #include "hw/arm/exynos4210.h"
 #include "hw/block/apple-silicon/nvme_mmu.h"
 #include "hw/display/apple_displaypipe_v2.h"
@@ -300,9 +300,9 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
 
     macho_highest_lowest(s8000_machine->secure_monitor, &tz1_virt_low,
                          &tz1_virt_high);
-    info_report("TrustZone 1 virtual address low: " TARGET_FMT_lx,
+    info_report("TrustZone 1 virtual address low: 0x" HWADDR_FMT_plx,
                 tz1_virt_low);
-    info_report("TrustZone 1 virtual address high: " TARGET_FMT_lx,
+    info_report("TrustZone 1 virtual address high: 0x" HWADDR_FMT_plx,
                 tz1_virt_high);
     AddressSpace *sas =
         cpu_get_address_space(CPU(s8000_machine->cpus[0]), ARMASIdx_S);
@@ -310,10 +310,10 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
     hwaddr tz1_entry =
         arm_load_macho(s8000_machine->secure_monitor, sas,
                        s8000_machine->sys_mem, NULL, S8000_TZ1_BASE, 0);
-    info_report("TrustZone 1 entry: " TARGET_FMT_lx, tz1_entry);
+    info_report("TrustZone 1 entry: 0x" HWADDR_FMT_plx, tz1_entry);
     hwaddr tz1_boot_args_pa =
         S8000_TZ1_BASE + (S8000_TZ1_SIZE - sizeof(AppleMonitorBootArgs));
-    info_report("TrustZone 1 boot args address: " TARGET_FMT_lx,
+    info_report("TrustZone 1 boot args address: 0x" HWADDR_FMT_plx,
                 tz1_boot_args_pa);
     apple_monitor_setup_boot_args(sas, s8000_machine->sys_mem, tz1_boot_args_pa,
                                   tz1_virt_low, S8000_TZ1_BASE, S8000_TZ1_SIZE,
@@ -1379,8 +1379,8 @@ static void s8000_machine_init(MachineState *machine)
     s8000_machine->build_version = build_version;
 
     macho_highest_lowest(hdr, &kernel_low, &kernel_high);
-    info_report("Kernel virtual low: 0x" TARGET_FMT_lx, kernel_low);
-    info_report("Kernel virtual high: 0x" TARGET_FMT_lx, kernel_high);
+    info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
+    info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
 
     g_virt_base = kernel_low;
     g_phys_base = (hwaddr)macho_get_buffer(hdr);

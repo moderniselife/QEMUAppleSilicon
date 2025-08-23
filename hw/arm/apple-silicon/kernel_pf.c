@@ -1,6 +1,24 @@
-#include "hw/arm/apple-silicon/boot.h"
+/*
+ * Kernel Patch Finder.
+ *
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "hw/arm/apple-silicon/mem.h"
-#include "hw/arm/apple-silicon/xnu_pf.h"
+#include "hw/arm/apple-silicon/pf.h"
 #include "qemu/bitops.h"
 #include "qemu/error-report.h"
 
@@ -264,6 +282,28 @@ static void kpf_mac_mount_patch(ApplePfPatchset *patchset)
                      ARRAY_SIZE(matches), (void *)kpf_mac_mount_callback);
 }
 
+static bool kpf_kprintf_callback(ApplePfPatch *patch, uint32_t *opcode_stream)
+{
+    info_report("Found kprintf enablement pattern");
+    opcode_stream[2] = 0x2A1F03E8; // mov w8, wzr
+    xnu_pf_disable_patch(patch);
+    return true;
+}
+
+// Enable kprintf even in release builds.
+static void kpf_kprintf_patch(ApplePfPatchset *patchset)
+{
+    uint64_t matches[] = {
+        0x910043AA, // add x10, fp, #0x10
+        0xF90007EA, // str x10, [sp, #0x8]
+        0x2A000008, // orr w8, w?, w?
+        0x34000008, // cbz w8, #?
+    };
+    uint64_t masks[] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFE0FC1F, 0xFF00001F };
+    xnu_pf_maskmatch(patchset, "kprintf", matches, masks, ARRAY_SIZE(matches),
+                     (void *)kpf_kprintf_callback);
+}
+
 void xnu_kpf(MachoHeader64 *hdr)
 {
     ApplePfPatchset *text_exec_patchset;
@@ -280,13 +320,9 @@ void xnu_kpf(MachoHeader64 *hdr)
     text_exec_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
     text_exec = xnu_pf_get_actual_text_exec(hdr);
 
-    ppltext_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
-    ppltext_exec = xnu_pf_section(hdr, "__PPLTEXT", "__text");
-
     apfs_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
     apfs_header = xnu_pf_get_kext_header(hdr, "com.apple.filesystems.apfs");
     apfs_text_exec = xnu_pf_section(apfs_header, "__TEXT_EXEC", "__text");
-
     kpf_apfs_patches(apfs_patchset);
     xnu_pf_apply(apfs_text_exec, apfs_patchset);
     xnu_pf_patchset_destroy(apfs_patchset);
@@ -301,20 +337,24 @@ void xnu_kpf(MachoHeader64 *hdr)
 
     kpf_amfi_patch(text_exec_patchset);
     kpf_mac_mount_patch(text_exec_patchset);
+    kpf_kprintf_patch(text_exec_patchset);
     xnu_pf_apply(text_exec, text_exec_patchset);
     xnu_pf_patchset_destroy(text_exec_patchset);
 
-    kpf_amfi_patch(ppltext_patchset);
-    kpf_trustcache_patch(ppltext_patchset);
+    ppltext_exec = xnu_pf_section(hdr, "__PPLTEXT", "__text");
     if (ppltext_exec == NULL) {
         warn_report("Failed to find `__PPLTEXT`.");
     } else {
+        ppltext_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
+        kpf_amfi_patch(ppltext_patchset);
+        kpf_trustcache_patch(ppltext_patchset);
+        kpf_kprintf_patch(ppltext_patchset);
         xnu_pf_apply(ppltext_exec, ppltext_patchset);
+        xnu_pf_patchset_destroy(ppltext_patchset);
+        g_free(ppltext_exec);
     }
-    xnu_pf_patchset_destroy(ppltext_patchset);
 
     g_free(text_exec);
-    g_free(ppltext_exec);
     g_free(apfs_text_exec);
     g_free(amfi_text_exec);
 }
