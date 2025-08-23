@@ -336,8 +336,10 @@ MachoSegmentCommand64 *macho_get_segment(MachoHeader64 *header,
 
 MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg, const char *name);
 
-hwaddr xnu_slide_va(hwaddr hdr_va);
+/// Modify a XNU virtual address to be fixed up and slide-adjusted.
+hwaddr xnu_fixup_slide_va(hwaddr va);
 
+/// Convert a XNU virtual address to a host pointer.
 void *xnu_va_to_ptr(hwaddr va);
 
 bool xnu_contains_boot_arg(const char *bootArgs, const char *arg,

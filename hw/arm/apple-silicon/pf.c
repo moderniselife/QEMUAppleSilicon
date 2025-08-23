@@ -25,8 +25,8 @@
 CkPfRange *ck_pf_range_from_xnu_va(hwaddr base, hwaddr size)
 {
     CkPfRange *range = g_new0(CkPfRange, 1);
-    range->base = base;
-    range->size = size;
+    range->addr = base;
+    range->length = size;
     range->ptr = xnu_va_to_ptr(base);
     return range;
 }
@@ -62,8 +62,8 @@ CkPfRange *ck_pf_find_section(MachoHeader64 *header, const char *segment_name,
     return ck_pf_range_from_xnu_va(sec->addr, sec->size);
 }
 
-MachoHeader64 *ck_pf_get_image_header(MachoHeader64 *kheader,
-                                      const char *kext_bundle_id)
+MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *kheader,
+                                       const char *kext_bundle_id)
 {
     uint64_t *info, *start;
     uint32_t count;
@@ -151,7 +151,7 @@ MachoHeader64 *ck_pf_get_image_header(MachoHeader64 *kheader,
 
     info = (uint64_t *)kmod_info_range->ptr;
     start = (uint64_t *)kmod_start_range->ptr;
-    count = kmod_info_range->size / 8;
+    count = kmod_info_range->length / 8;
     for (i = 0; i < count; i++) {
         const char *kext_name = (const char *)xnu_va_to_ptr(info[i]) + 0x10;
         if (strcmp(kext_name, kext_bundle_id) == 0) {
@@ -173,7 +173,7 @@ CkPfRange *ck_pf_get_kernel_text(MachoHeader64 *header)
         return ck_pf_find_section(header, "__TEXT_EXEC", "__text");
     }
 
-    MachoHeader64 *kernel = ck_pf_get_image_header(header, "com.apple.kernel");
+    MachoHeader64 *kernel = ck_pf_find_image_header(header, "com.apple.kernel");
     return kernel == NULL ? NULL :
                             ck_pf_find_section(kernel, "__TEXT_EXEC", "__text");
 }
@@ -189,7 +189,7 @@ static void ck_pf_find_callback_ctx(CkPfRange *range, const char *name,
     bool found;
 
     if (mask == NULL) {
-        match = memmem(range->ptr, range->size, find, count);
+        match = memmem(range->ptr, range->length, find, count);
         if (match == NULL || !callback(ctx, match)) {
             error_report("`%s` patch did not apply!", name);
         } else {
@@ -200,7 +200,7 @@ static void ck_pf_find_callback_ctx(CkPfRange *range, const char *name,
             g_assert_cmphex(find[i] & mask[i], ==, find[i]);
         }
 
-        for (i = 0; i < range->size; ++i) {
+        for (i = 0; i < range->length; ++i) {
             found = true;
             match = range->ptr + i;
             for (match_i = 0; match_i < count; ++match_i) {

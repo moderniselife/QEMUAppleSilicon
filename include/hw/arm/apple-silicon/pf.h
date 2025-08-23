@@ -23,20 +23,27 @@
 #include "hw/arm/apple-silicon/boot.h"
 
 typedef struct {
-    hwaddr base;
-    hwaddr size;
+    /// Not guaranteed to be a physical address.
+    hwaddr addr;
+    hwaddr length;
+    /// Guaranteed to be an accessible host pointer.
     void *ptr;
 } CkPfRange;
 
+/// Convert a XNU virtual address to a patch finder range.
 CkPfRange *ck_pf_range_from_xnu_va(hwaddr base, hwaddr size);
 
+/// Find patch finder range by segment inside a Mach-o.
 CkPfRange *ck_pf_find_segment(MachoHeader64 *hdr, const char *name);
+/// Find patch finder range by a segment's section inside a Mach-o.
 CkPfRange *ck_pf_find_section(MachoHeader64 *hdr, const char *segment,
                               const char *section);
 
+/// Find the kernel `__TEXT` section in a kernel cache file.
 CkPfRange *ck_pf_get_kernel_text(MachoHeader64 *hdr);
-MachoHeader64 *ck_pf_get_image_header(MachoHeader64 *hdr,
-                                      const char *bundle_id);
+/// Find an image by its bundle identifier.
+MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *hdr,
+                                       const char *bundle_id);
 
 /// Precondition: `insn` must be masked.
 void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
@@ -45,7 +52,10 @@ void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
 void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
                            uint32_t mask);
 
+/// Callback function prototype. `ctx` may be null.
 typedef bool (*CkPfCallback)(void *ctx, uint8_t *buffer);
+
+/// Precondition: bytes in `find` must be masked.
 void ck_pf_find_callback(CkPfRange *range, const char *name,
                          const uint8_t *find, const uint8_t *mask, size_t count,
                          CkPfCallback callback);

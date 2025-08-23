@@ -238,13 +238,13 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     MachoHeader64 *amfi_hdr;
     CkPfRange *amfi_text_exec;
 
-    apfs_header = ck_pf_get_image_header(hdr, "com.apple.filesystems.apfs");
+    apfs_header = ck_pf_find_image_header(hdr, "com.apple.filesystems.apfs");
     g_assert_nonnull(apfs_header);
     apfs_text_exec = ck_pf_find_section(apfs_header, "__TEXT_EXEC", "__text");
     g_assert_nonnull(apfs_text_exec);
     ck_kernel_pf_apfs_patches(apfs_text_exec);
 
-    amfi_hdr = ck_pf_get_image_header(
+    amfi_hdr = ck_pf_find_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");
     g_assert_nonnull(amfi_hdr);
     amfi_text_exec = ck_pf_find_section(amfi_hdr, "__TEXT_EXEC", "__text");
