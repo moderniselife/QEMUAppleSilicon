@@ -149,7 +149,7 @@ static void s8000_create_s3c_uart(const S8000MachineState *s8000_machine,
 
 static void s8000_patch_kernel(MachoHeader64 *hdr)
 {
-    xnu_kpf(hdr);
+    ck_patch_kernel(hdr);
 }
 
 static bool s8000_check_panic(S8000MachineState *s8000_machine)

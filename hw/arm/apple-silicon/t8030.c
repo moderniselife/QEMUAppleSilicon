@@ -155,7 +155,7 @@ static void t8030_create_s3c_uart(const T8030MachineState *t8030_machine,
 
 static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
 {
-    xnu_kpf(hdr);
+    ck_patch_kernel(hdr);
 
     if (BUILD_VERSION_MAJOR(build_version) != 14 ||
         BUILD_VERSION_MINOR(build_version) != 0 ||

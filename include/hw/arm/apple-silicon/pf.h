@@ -1,7 +1,7 @@
 /*
- * Patch Finder.
+ * ChefKiss Patch Finder (PenguinWizardryC).
  *
- * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ * Copyright (c) 2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,70 +23,37 @@
 #include "hw/arm/apple-silicon/boot.h"
 
 typedef struct {
-    uint64_t va;
-    uint64_t size;
-    uint8_t *cacheable_base;
-} ApplePfRange;
+    hwaddr base;
+    hwaddr size;
+    void *ptr;
+} CkPfRange;
 
-typedef struct ApplePfPatch ApplePfPatch;
+CkPfRange *ck_pf_range_from_xnu_va(hwaddr base, hwaddr size);
 
-typedef enum {
-    XNU_PF_ACCESS_8BIT,
-    XNU_PF_ACCESS_16BIT,
-    XNU_PF_ACCESS_32BIT,
-    XNU_PF_ACCESS_64BIT,
-} XnuPfPatchsetAccessType;
+CkPfRange *ck_pf_find_segment(MachoHeader64 *hdr, const char *name);
+CkPfRange *ck_pf_find_section(MachoHeader64 *hdr, const char *segment,
+                              const char *section);
 
-struct ApplePfPatch {
-    bool (*pf_callback)(ApplePfPatch *patch, void *cacheable_stream);
-    bool has_fired;
-    bool should_match;
-    void (*pf_match)(ApplePfPatch *patch, XnuPfPatchsetAccessType access_type,
-                     void *preread, void *cacheable_stream);
-    ApplePfPatch *next_patch;
-    uint8_t pf_data[0];
-    const char *name;
-};
+CkPfRange *ck_pf_get_kernel_text(MachoHeader64 *hdr);
+MachoHeader64 *ck_pf_get_image_header(MachoHeader64 *hdr,
+                                      const char *bundle_id);
 
-typedef bool (*xnu_pf_patch_callback)(ApplePfPatch *patch,
-                                      void *cacheable_stream);
+/// Precondition: `insn` must be masked.
+void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
+                           uint32_t mask);
+/// Precondition: `insn` must be masked.
+void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
+                           uint32_t mask);
 
-typedef struct {
-    ApplePfPatch *patch_head;
-    XnuPfPatchsetAccessType access_type;
-} ApplePfPatchset;
+typedef bool (*CkPfCallback)(void *ctx, uint8_t *buffer);
+void ck_pf_find_callback(CkPfRange *range, const char *name,
+                         const uint8_t *find, const uint8_t *mask, size_t count,
+                         CkPfCallback callback);
+/// Precondition: bytes in `find` must be masked.
+void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
+                        const uint8_t *mask, size_t count,
+                        const uint8_t *replace, const uint8_t *replace_mask,
+                        size_t replace_off, size_t replace_count);
 
-ApplePfRange *xnu_pf_range_from_va(uint64_t va, uint64_t size);
-
-ApplePfRange *xnu_pf_segment(MachoHeader64 *header, const char *segment_name);
-
-ApplePfRange *xnu_pf_section(MachoHeader64 *header, const char *segment,
-                             const char *section_name);
-
-void xnu_pf_disable_patch(ApplePfPatch *patch);
-
-void xnu_pf_enable_patch(ApplePfPatch *patch);
-
-ApplePfRange *xnu_pf_get_actual_text_exec(MachoHeader64 *header);
-
-ApplePfPatch *xnu_pf_ptr_to_data(ApplePfPatchset *patchset, uint64_t slide,
-                                 ApplePfRange *range, void *data, size_t datasz,
-                                 xnu_pf_patch_callback callback);
-
-ApplePfPatch *xnu_pf_maskmatch(ApplePfPatchset *patchset, const char *name,
-                               uint64_t *matches, uint64_t *masks,
-                               uint32_t entryc, xnu_pf_patch_callback callback);
-
-void xnu_pf_apply(ApplePfRange *range, ApplePfPatchset *patchset);
-
-ApplePfPatchset *xnu_pf_patchset_create(XnuPfPatchsetAccessType access_type);
-
-void xnu_pf_patchset_destroy(ApplePfPatchset *patchset);
-
-MachoHeader64 *xnu_pf_get_kext_header(MachoHeader64 *kheader,
-                                      const char *kext_bundle_id);
-
-void xnu_pf_apply_each_kext(MachoHeader64 *kheader, ApplePfPatchset *patchset);
-
-void xnu_kpf(MachoHeader64 *hdr);
+void ck_patch_kernel(MachoHeader64 *hdr);
 #endif

@@ -1433,12 +1433,12 @@ MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg,
     return NULL;
 }
 
-uint64_t xnu_slide_hdr_va(MachoHeader64 *header, uint64_t hdr_va)
+hwaddr xnu_slide_va(hwaddr hdr_va)
 {
-    return hdr_va + g_virt_slide;
+    return (0xFFFF000000000000 | hdr_va) + g_virt_slide;
 }
 
-void *xnu_va_to_ptr(uint64_t va)
+void *xnu_va_to_ptr(hwaddr va)
 {
-    return (void *)(va - g_virt_base + g_phys_base);
+    return (void *)(xnu_slide_va(va) - g_virt_base + g_phys_base);
 }
