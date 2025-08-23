@@ -61,33 +61,35 @@ static bool kpf_apfs_vfsop_mount(ApplePfPatch *patch, uint32_t *opcode_stream)
 static void kpf_apfs_patches(ApplePfPatchset *patchset)
 {
     // Bypass root authentication
-    uint64_t matches[] = {
+    uint64_t matches_root_auth[] = {
         0x37280068, // tbnz w8, 5, 0xC
         0X52800A00, // mov w0, 0x50
         0xD65F03C0, // ret
     };
-    uint64_t masks[] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+    uint64_t masks_root_auth[] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
 
-    xnu_pf_maskmatch(patchset, "handle_eval_rootauth", matches, masks,
-                     ARRAY_SIZE(masks), (void *)kpf_apfs_rootauth);
+    xnu_pf_maskmatch(patchset, "handle_eval_rootauth", matches_root_auth,
+                     masks_root_auth, ARRAY_SIZE(masks_root_auth),
+                     (void *)kpf_apfs_rootauth);
 
     // Allow mounting root as R/W
-    uint64_t matches2[] = {
+    uint64_t matches_root_rw[] = {
         0x37700000, // tbnz w0, 0xE, *
         0xB94003A0, // ldr x*, [x29/sp, *]
         0x121F7800, // and w*, w*, 0xFFFFFFFE
         0xB90003A0, // str x*, [x29/sp, *]
     };
 
-    uint64_t masks2[] = {
+    uint64_t masks_root_rw[] = {
         0xFFF8001F,
         0xFFFE03A0,
         0xFFFFFC00,
         0xFFC003A0,
     };
 
-    xnu_pf_maskmatch(patchset, "apfs_vfsop_mount", matches2, masks2,
-                     ARRAY_SIZE(masks2), (void *)kpf_apfs_vfsop_mount);
+    xnu_pf_maskmatch(patchset, "apfs_vfsop_mount", matches_root_rw,
+                     masks_root_rw, ARRAY_SIZE(masks_root_rw),
+                     (void *)kpf_apfs_vfsop_mount);
 }
 
 static bool kpf_amfi_callback(ApplePfPatch *patch, uint32_t *opcode_stream)
@@ -207,10 +209,10 @@ static bool kpf_amfi_sha1(ApplePfPatch *patch, uint32_t *opcode_stream)
 static void kpf_amfi_kext_patches(ApplePfPatchset *patchset)
 {
     // Allow running binaries with SHA1 signatures
-    uint64_t i_matches[] = { 0x36D00002 }; // tbz w2, 0x1A, *
-    uint64_t i_masks[] = { 0xFFF8001F };
-    xnu_pf_maskmatch(patchset, "amfi_sha1", i_matches, i_masks,
-                     ARRAY_SIZE(i_matches), (void *)kpf_amfi_sha1);
+    uint64_t matches[] = { 0x36D00002 }; // tbz w2, 0x1A, *
+    uint64_t masks[] = { 0xFFF8001F };
+    xnu_pf_maskmatch(patchset, "amfi_sha1", matches, masks, ARRAY_SIZE(matches),
+                     (void *)kpf_amfi_sha1);
 }
 
 static bool kpf_mac_mount_callback(ApplePfPatch *patch, uint32_t *opcode_stream)
