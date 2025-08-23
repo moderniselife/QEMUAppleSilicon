@@ -75,10 +75,10 @@ MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *kheader,
         return macho_get_fileset_header(kheader, kext_bundle_id);
     }
 
-    CkPfRange *kmod_info_range =
+    g_autofree CkPfRange *kmod_info_range =
         ck_pf_find_section(kheader, "__PRELINK_INFO", "__kmod_info");
     if (kmod_info_range == NULL) {
-        CkPfRange *kext_info_range =
+        g_autofree CkPfRange *kext_info_range =
             ck_pf_find_section(kheader, "__PRELINK_INFO", "__info");
         if (kext_info_range == NULL) {
             error_report("Unsupported XNU.");
@@ -126,7 +126,6 @@ MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *kheader,
                                 if (avalue != NULL) {
                                     avalue = strstr(avalue, ">");
                                     if (avalue != NULL) {
-                                        g_free(kext_info_range);
                                         return xnu_va_to_ptr(
                                             strtoull(++avalue, 0, 0));
                                     }
@@ -140,10 +139,9 @@ MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *kheader,
             last_dict = strstr(end_dict, "<dict>");
         }
 
-        g_free(kext_info_range);
         return NULL;
     }
-    CkPfRange *kmod_start_range =
+    g_autofree CkPfRange *kmod_start_range =
         ck_pf_find_section(kheader, "__PRELINK_INFO", "__kmod_start");
     if (kmod_start_range == NULL) {
         return NULL;
@@ -155,14 +153,9 @@ MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *kheader,
     for (i = 0; i < count; i++) {
         const char *kext_name = (const char *)xnu_va_to_ptr(info[i]) + 0x10;
         if (strcmp(kext_name, kext_bundle_id) == 0) {
-            g_free(kmod_info_range);
-            g_free(kmod_start_range);
-            return (MachoHeader64 *)xnu_va_to_ptr(start[i]);
+            return xnu_va_to_ptr(start[i]);
         }
     }
-
-    g_free(kmod_info_range);
-    g_free(kmod_start_range);
 
     return NULL;
 }

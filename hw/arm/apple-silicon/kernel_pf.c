@@ -231,42 +231,32 @@ static void ck_kernel_pf_kprintf_patch(CkPfRange *range)
 
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
-    CkPfRange *text_exec;
-    CkPfRange *ppltext_exec;
+    g_autofree CkPfRange *text_exec;
+    g_autofree CkPfRange *ppltext_exec;
     MachoHeader64 *apfs_header;
-    CkPfRange *apfs_text_exec;
+    g_autofree CkPfRange *apfs_text_exec;
     MachoHeader64 *amfi_hdr;
-    CkPfRange *amfi_text_exec;
+    g_autofree CkPfRange *amfi_text_exec;
 
     apfs_header = ck_pf_find_image_header(hdr, "com.apple.filesystems.apfs");
-    g_assert_nonnull(apfs_header);
     apfs_text_exec = ck_pf_find_section(apfs_header, "__TEXT_EXEC", "__text");
-    g_assert_nonnull(apfs_text_exec);
     ck_kernel_pf_apfs_patches(apfs_text_exec);
 
     amfi_hdr = ck_pf_find_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");
-    g_assert_nonnull(amfi_hdr);
     amfi_text_exec = ck_pf_find_section(amfi_hdr, "__TEXT_EXEC", "__text");
-    g_assert_nonnull(amfi_text_exec);
     ck_kernel_pf_amfi_kext_patches(amfi_text_exec);
 
     text_exec = ck_pf_get_kernel_text(hdr);
-    g_assert_nonnull(text_exec);
     ck_kernel_pf_tc_patch(text_exec);
     ck_kernel_pf_mac_mount_patch(text_exec);
     ck_kernel_pf_kprintf_patch(text_exec);
 
     ppltext_exec = ck_pf_find_section(hdr, "__PPLTEXT", "__text");
     if (ppltext_exec == NULL) {
-        warn_report("Failed to find `__PPLTEXT`.");
+        warn_report("Failed to find `__PPLTEXT.__text`.");
     } else {
         ck_kernel_pf_tc_patch(ppltext_exec);
         ck_kernel_pf_tc_ios16_patch(ppltext_exec);
-        g_free(ppltext_exec);
     }
-
-    g_free(text_exec);
-    g_free(apfs_text_exec);
-    g_free(amfi_text_exec);
 }
