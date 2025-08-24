@@ -254,18 +254,32 @@ static void ck_kernel_pf_amx_patch(CkPfRange *range)
                         ck_kernel_pf_amx_callback);
 }
 
+static void ck_kernel_pf_apfs_snapshot_patch(CkPfRange *range)
+{
+    uint8_t find[] = "com.apple.os.update-";
+    uint8_t repl[] = { 0x00 }; // null byte
+    ck_pf_find_replace(range, "Disable APFS snapshots", find, NULL,
+                       sizeof(find), repl, NULL, 0, sizeof(repl));
+}
+
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
-    g_autofree CkPfRange *text_exec;
-    g_autofree CkPfRange *ppltext_exec;
     MachoHeader64 *apfs_header;
     g_autofree CkPfRange *apfs_text_exec;
+    g_autofree CkPfRange *apfs_cstring;
     MachoHeader64 *amfi_hdr;
     g_autofree CkPfRange *amfi_text_exec;
+    g_autofree CkPfRange *text_exec;
+    g_autofree CkPfRange *ppltext_exec;
 
     apfs_header = ck_pf_find_image_header(hdr, "com.apple.filesystems.apfs");
     apfs_text_exec = ck_pf_find_section(apfs_header, "__TEXT_EXEC", "__text");
     ck_kernel_pf_apfs_patches(apfs_text_exec);
+    apfs_cstring = ck_pf_find_section(apfs_header, "__TEXT", "__cstring");
+    if (apfs_cstring == NULL) {
+        apfs_cstring = ck_pf_find_section(hdr, "__TEXT", "__cstring");
+    }
+    ck_kernel_pf_apfs_snapshot_patch(apfs_cstring);
 
     amfi_hdr = ck_pf_find_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");

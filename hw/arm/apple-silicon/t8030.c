@@ -192,9 +192,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     *(uint32_t *)vtop_slid(0xFFFFFFF008B58030) = cpu_to_le32(0x52A00028);
 #endif
 
-    // com.apple.os.update- -> xom.apple.os.update-
-    *(char *)vtop_slid(0xFFFFFFF0075085FC) = 'x';
-
     // Disable check for `PE_i_can_has_debugger` in MTSPI/MTDevice code
     // so we can use the boot arguments `mt-strings=1 mt-bytes=1`.
     *(uint32_t *)vtop_slid(0xFFFFFFF0085D70E4) = nop;
