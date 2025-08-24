@@ -28,7 +28,146 @@
 #define RETAB (0xD65F0FFF)
 #define PACIBSP (0xD503237F)
 
-static void ck_kernel_pf_apfs_patches(CkPfRange *range)
+static CkPfRange *ck_kp_range_from_va(const char *name, hwaddr base,
+                                      hwaddr size)
+{
+    CkPfRange *range = g_new0(CkPfRange, 1);
+    range->addr = base;
+    range->length = size;
+    range->ptr = xnu_va_to_ptr(base);
+    range->name = name;
+    return range;
+}
+
+static CkPfRange *ck_kp_find_section_range(MachoHeader64 *header,
+                                           const char *segment_name,
+                                           const char *section_name)
+{
+    MachoSection64 *sec;
+    MachoSegmentCommand64 *seg;
+
+    seg = macho_get_segment(header, segment_name);
+    if (seg == NULL) {
+        return NULL;
+    }
+
+    sec = macho_get_section(seg, section_name);
+    return sec == NULL ?
+               NULL :
+               ck_kp_range_from_va(segment_name, sec->addr, sec->size);
+}
+
+// TODO: Fix host endianness BE vs LE troubles in here.
+static MachoHeader64 *ck_kp_find_xnu_image_header(MachoHeader64 *kheader,
+                                                  const char *kext_bundle_id)
+{
+    uint64_t *info, *start;
+    uint32_t count;
+    uint32_t i;
+    char kname[256];
+    const char *prelinkinfo, *last_dict;
+
+    if (kheader->file_type == MH_FILESET) {
+        return macho_get_fileset_header(kheader, kext_bundle_id);
+    }
+
+    g_autofree CkPfRange *kmod_info_range =
+        ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__kmod_info");
+    if (kmod_info_range == NULL) {
+        g_autofree CkPfRange *kext_info_range =
+            ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__info");
+        if (kext_info_range == NULL) {
+            error_report("Unsupported XNU.");
+            return NULL;
+        }
+
+        prelinkinfo =
+            strstr((const char *)kext_info_range->ptr, "PrelinkInfoDictionary");
+        last_dict = strstr(prelinkinfo, "<array>") + 7;
+        while (last_dict) {
+            const char *nested_dict, *ident;
+            const char *end_dict = strstr(last_dict, "</dict>");
+            if (!end_dict) {
+                break;
+            }
+
+            nested_dict = strstr(last_dict + 1, "<dict>");
+            while (nested_dict) {
+                if (nested_dict > end_dict) {
+                    break;
+                }
+
+                nested_dict = strstr(nested_dict + 1, "<dict>");
+                end_dict = strstr(end_dict + 1, "</dict>");
+            }
+
+            ident = g_strstr_len(last_dict, end_dict - last_dict,
+                                 "CFBundleIdentifier");
+            if (ident != NULL) {
+                const char *value = strstr(ident, "<string>");
+                if (value != NULL) {
+                    const char *value_end;
+
+                    value += strlen("<string>");
+                    value_end = strstr(value, "</string>");
+                    if (value_end != NULL) {
+                        memcpy(kname, value, value_end - value);
+                        kname[value_end - value] = 0;
+                        if (strcmp(kname, kext_bundle_id) == 0) {
+                            const char *addr =
+                                g_strstr_len(last_dict, end_dict - last_dict,
+                                             "_PrelinkExecutableLoadAddr");
+                            if (addr != NULL) {
+                                const char *avalue = strstr(addr, "<integer");
+                                if (avalue != NULL) {
+                                    avalue = strstr(avalue, ">");
+                                    if (avalue != NULL) {
+                                        return xnu_va_to_ptr(
+                                            strtoull(++avalue, 0, 0));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            last_dict = strstr(end_dict, "<dict>");
+        }
+
+        return NULL;
+    }
+    g_autofree CkPfRange *kmod_start_range =
+        ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__kmod_start");
+    if (kmod_start_range != NULL) {
+        info = (uint64_t *)kmod_info_range->ptr;
+        start = (uint64_t *)kmod_start_range->ptr;
+        count = kmod_info_range->length / 8;
+        for (i = 0; i < count; i++) {
+            const char *kext_name = (const char *)xnu_va_to_ptr(info[i]) + 0x10;
+            if (strcmp(kext_name, kext_bundle_id) == 0) {
+                return xnu_va_to_ptr(start[i]);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static CkPfRange *ck_kp_get_kernel_text(MachoHeader64 *header)
+{
+    if (header->file_type == MH_FILESET) {
+        MachoHeader64 *kernel =
+            ck_kp_find_xnu_image_header(header, "com.apple.kernel");
+        return kernel == NULL ?
+                   NULL :
+                   ck_kp_find_section_range(kernel, "__TEXT_EXEC", "__text");
+    }
+
+    return ck_kp_find_section_range(header, "__TEXT_EXEC", "__text");
+}
+
+static void ck_kp_apfs_patches(CkPfRange *range)
 {
     uint8_t find_root_auth[] = {
         0x68, 0x00, 0x28, 0x37, // tbnz w8, 5, 0xC
@@ -57,7 +196,7 @@ static void ck_kernel_pf_apfs_patches(CkPfRange *range)
                        0, sizeof(repl_root_rw));
 }
 
-static bool ck_kernel_pf_tc_callback(void *ctx, uint8_t *buffer)
+static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
 {
     if (((ldl_le_p(buffer - 4) & 0xFF000000) != 0x91000000) &&
         ((ldl_le_p(buffer - 8) & 0xFF000000) != 0x91000000)) {
@@ -112,7 +251,7 @@ static bool ck_kernel_pf_tc_callback(void *ctx, uint8_t *buffer)
     return false;
 }
 
-static void ck_kernel_pf_tc_patch(CkPfRange *range)
+static void ck_kp_tc_patch(CkPfRange *range)
 {
     uint8_t find[] = {
         0x00, 0x02, 0x80, 0x52, // mov w?, 0x16
@@ -122,10 +261,10 @@ static void ck_kernel_pf_tc_patch(CkPfRange *range)
     uint8_t mask[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
                        0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
     ck_pf_find_callback(range, "AMFI, all binaries in trustcache", find, mask,
-                        sizeof(find), ck_kernel_pf_tc_callback);
+                        sizeof(find), ck_kp_tc_callback);
 }
 
-static bool ck_kernel_pf_tc_ios16_callback(void *ctx, uint8_t *buffer)
+static bool ck_kp_tc_ios16_callback(void *ctx, uint8_t *buffer)
 {
     void *start = ck_pf_find_prev_insn(buffer, 100, PACIBSP, 0xFFFFFFFF, 0);
 
@@ -139,16 +278,15 @@ static bool ck_kernel_pf_tc_ios16_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kernel_pf_tc_ios16_patch(CkPfRange *range)
+static void ck_kp_tc_ios16_patch(CkPfRange *range)
 {
     uint8_t find[] = { 0xC0, 0xCF, 0x9D, 0xD2 }; // mov w?, 0xEE7E
     uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
     ck_pf_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
-                        find, mask, sizeof(find),
-                        ck_kernel_pf_tc_ios16_callback);
+                        find, mask, sizeof(find), ck_kp_tc_ios16_callback);
 }
 
-static bool ck_kernel_pf_amfi_sha1(void *ctx, uint8_t *buffer)
+static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
 {
     void *cmp = ck_pf_find_next_insn(buffer, 0x10, 0x7100081F, 0xFFFFFFFF,
                                      0); // cmp w0, 2
@@ -162,15 +300,15 @@ static bool ck_kernel_pf_amfi_sha1(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kernel_pf_amfi_kext_patches(CkPfRange *range)
+static void ck_kp_amfi_kext_patches(CkPfRange *range)
 {
     uint8_t find[] = { 0x02, 0x00, 0xD0, 0x36 }; // tbz w2, 0x1A, ?
     uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
     ck_pf_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
-                        sizeof(find), ck_kernel_pf_amfi_sha1);
+                        sizeof(find), ck_kp_amfi_sha1);
 }
 
-static bool ck_kernel_pf_mac_mount_callback(void *ctx, uint8_t *buffer)
+static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
 {
     void *mac_mount =
         ck_pf_find_prev_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
@@ -204,19 +342,19 @@ static bool ck_kernel_pf_mac_mount_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kernel_pf_mac_mount_patch(CkPfRange *range)
+static void ck_kp_mac_mount_patch(CkPfRange *range)
 {
     uint8_t find_old[] = { 0xE9, 0x2F, 0x1F, 0x32 }; // orr w9, wzr, 0x1FFE
     ck_pf_find_callback(range, "allow remounting rootfs, union mounts (old)",
                         find_old, NULL, sizeof(find_old),
-                        ck_kernel_pf_mac_mount_callback);
+                        ck_kp_mac_mount_callback);
     uint8_t find_new[] = { 0xC9, 0xFF, 0x83, 0x52 }; // movz w9, 0x1FFE
     ck_pf_find_callback(range, "allow remounting rootfs, union mounts (new)",
                         find_new, NULL, sizeof(find_new),
-                        ck_kernel_pf_mac_mount_callback);
+                        ck_kp_mac_mount_callback);
 }
 
-static void ck_kernel_pf_kprintf_patch(CkPfRange *range)
+static void ck_kp_kprintf_patch(CkPfRange *range)
 {
     uint8_t find[] = {
         0xAA, 0x43, 0x00, 0x91, // add x10, fp, #0x10
@@ -231,7 +369,7 @@ static void ck_kernel_pf_kprintf_patch(CkPfRange *range)
                        replace, NULL, 8, sizeof(replace));
 }
 
-static bool ck_kernel_pf_amx_callback(void *ctx, uint8_t *buffer)
+static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
 {
     stl_le_p(buffer, 0x52810009); // mov w9, #0x800
     void *amx_ver_str =
@@ -244,7 +382,7 @@ static bool ck_kernel_pf_amx_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kernel_pf_amx_patch(CkPfRange *range)
+static void ck_kp_amx_patch(CkPfRange *range)
 {
     uint8_t find[] = {
         0xE9, 0x83, 0x05, 0x32, // mov w9, #0x8000800
@@ -252,10 +390,10 @@ static void ck_kernel_pf_amx_patch(CkPfRange *range)
     };
     uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF };
     ck_pf_find_callback(range, "disable AMX", find, mask, sizeof(find),
-                        ck_kernel_pf_amx_callback);
+                        ck_kp_amx_callback);
 }
 
-static void ck_kernel_pf_apfs_snapshot_patch(CkPfRange *range)
+static void ck_kp_apfs_snapshot_patch(CkPfRange *range)
 {
     uint8_t find[] = "com.apple.os.update-";
     uint8_t repl[] = { 0x00 }; // null byte
@@ -273,31 +411,34 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     g_autofree CkPfRange *text_exec;
     g_autofree CkPfRange *ppltext_exec;
 
-    apfs_header = ck_pf_find_image_header(hdr, "com.apple.filesystems.apfs");
-    apfs_text_exec = ck_pf_find_section(apfs_header, "__TEXT_EXEC", "__text");
-    ck_kernel_pf_apfs_patches(apfs_text_exec);
-    apfs_cstring = ck_pf_find_section(apfs_header, "__TEXT", "__cstring");
+    apfs_header =
+        ck_kp_find_xnu_image_header(hdr, "com.apple.filesystems.apfs");
+    apfs_text_exec =
+        ck_kp_find_section_range(apfs_header, "__TEXT_EXEC", "__text");
+    ck_kp_apfs_patches(apfs_text_exec);
+    apfs_cstring = ck_kp_find_section_range(apfs_header, "__TEXT", "__cstring");
     if (apfs_cstring == NULL) {
-        apfs_cstring = ck_pf_find_section(hdr, "__TEXT", "__cstring");
+        apfs_cstring = ck_kp_find_section_range(hdr, "__TEXT", "__cstring");
     }
-    ck_kernel_pf_apfs_snapshot_patch(apfs_cstring);
+    ck_kp_apfs_snapshot_patch(apfs_cstring);
 
-    amfi_hdr = ck_pf_find_image_header(
+    amfi_hdr = ck_kp_find_xnu_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");
-    amfi_text_exec = ck_pf_find_section(amfi_hdr, "__TEXT_EXEC", "__text");
-    ck_kernel_pf_amfi_kext_patches(amfi_text_exec);
+    amfi_text_exec =
+        ck_kp_find_section_range(amfi_hdr, "__TEXT_EXEC", "__text");
+    ck_kp_amfi_kext_patches(amfi_text_exec);
 
-    text_exec = ck_pf_get_kernel_text(hdr);
-    ck_kernel_pf_tc_patch(text_exec);
-    ck_kernel_pf_mac_mount_patch(text_exec);
-    ck_kernel_pf_kprintf_patch(text_exec);
-    ck_kernel_pf_amx_patch(text_exec);
+    text_exec = ck_kp_get_kernel_text(hdr);
+    ck_kp_tc_patch(text_exec);
+    ck_kp_mac_mount_patch(text_exec);
+    ck_kp_kprintf_patch(text_exec);
+    ck_kp_amx_patch(text_exec);
 
-    ppltext_exec = ck_pf_find_section(hdr, "__PPLTEXT", "__text");
+    ppltext_exec = ck_kp_find_section_range(hdr, "__PPLTEXT", "__text");
     if (ppltext_exec == NULL) {
         warn_report("Failed to find `__PPLTEXT.__text`.");
     } else {
-        ck_kernel_pf_tc_patch(ppltext_exec);
-        ck_kernel_pf_tc_ios16_patch(ppltext_exec);
+        ck_kp_tc_patch(ppltext_exec);
+        ck_kp_tc_ios16_patch(ppltext_exec);
     }
 }

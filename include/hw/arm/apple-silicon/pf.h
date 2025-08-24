@@ -20,7 +20,8 @@
 #ifndef HW_ARM_APPLE_SILICON_PF_H
 #define HW_ARM_APPLE_SILICON_PF_H
 
-#include "hw/arm/apple-silicon/boot.h"
+#include "qemu/osdep.h"
+#include "exec/hwaddr.h"
 
 typedef struct {
     /// Not guaranteed to be a physical address.
@@ -30,21 +31,6 @@ typedef struct {
     void *ptr;
     const char *name;
 } CkPfRange;
-
-/// Convert a XNU virtual address to a patch finder range.
-CkPfRange *ck_pf_range_from_xnu_va(const char *name, hwaddr base, hwaddr size);
-
-/// Find patch finder range by segment inside a Mach-o.
-CkPfRange *ck_pf_find_segment(MachoHeader64 *hdr, const char *name);
-/// Find patch finder range by a segment's section inside a Mach-o.
-CkPfRange *ck_pf_find_section(MachoHeader64 *hdr, const char *segment,
-                              const char *section);
-
-/// Find the kernel `__TEXT` section in a kernel cache file.
-CkPfRange *ck_pf_get_kernel_text(MachoHeader64 *hdr);
-/// Find an image by its bundle identifier.
-MachoHeader64 *ck_pf_find_image_header(MachoHeader64 *hdr,
-                                       const char *bundle_id);
 
 /// Precondition: `insn` must be masked.
 void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
