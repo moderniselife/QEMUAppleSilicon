@@ -1,5 +1,5 @@
 /*
- * Apple T8030 SoC.
+ * Apple T8030 SoC (iPhone 11).
  *
  * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
@@ -23,10 +23,10 @@
 #include "hw/arm/apple-silicon/boot.h"
 #include "hw/arm/apple-silicon/dart.h"
 #include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/kernel_patches.h"
 #include "hw/arm/apple-silicon/lm-backlight.h"
 #include "hw/arm/apple-silicon/mem.h"
 #include "hw/arm/apple-silicon/mt-spi.h"
-#include "hw/arm/apple-silicon/pf.h"
 #include "hw/arm/apple-silicon/sart.h"
 #include "hw/arm/apple-silicon/sep-sim.h"
 #include "hw/arm/apple-silicon/sep.h"

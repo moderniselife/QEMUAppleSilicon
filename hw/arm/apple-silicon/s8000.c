@@ -1,5 +1,5 @@
 /*
- * Apple s8000 SoC.
+ * Apple S8000 SoC (iPhone 6s Plus).
  *
  * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
@@ -21,9 +21,9 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/a9.h"
 #include "hw/arm/apple-silicon/dart.h"
+#include "hw/arm/apple-silicon/kernel_patches.h"
 #include "hw/arm/apple-silicon/lm-backlight.h"
 #include "hw/arm/apple-silicon/mem.h"
-#include "hw/arm/apple-silicon/pf.h"
 #include "hw/arm/apple-silicon/s8000-config.c.inc"
 #include "hw/arm/apple-silicon/s8000.h"
 #include "hw/arm/apple-silicon/sep-sim.h"

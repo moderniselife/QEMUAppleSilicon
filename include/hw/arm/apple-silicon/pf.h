@@ -66,5 +66,4 @@ void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
                         const uint8_t *replace, const uint8_t *replace_mask,
                         size_t replace_off, size_t replace_count);
 
-void ck_patch_kernel(MachoHeader64 *hdr);
-#endif
+#endif /* HW_ARM_APPLE_SILICON_PF_H */
