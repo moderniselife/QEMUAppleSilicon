@@ -401,7 +401,7 @@ static void ck_kp_amx_patch(CKPatcherRange *range)
 static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
 {
     uint8_t find[] = "com.apple.os.update-";
-    uint8_t repl[] = { 0x00 }; // null byte
+    uint8_t repl[] = "shitcode.os.bullshit";
     ck_patcher_find_replace(range, "Disable APFS snapshots", find, NULL,
                             sizeof(find), repl, NULL, 0, sizeof(repl));
 }
