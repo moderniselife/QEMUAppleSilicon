@@ -589,8 +589,7 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         g_free(seprom);
 
 #if 1 // for T8030 SEPROM
-        uint64_t value = 0x8000000000000000;
-        uint32_t value32_mov_x0_1 = 0xD2800020; // mov x0, #0x1
+        uint64_t value = BIT(63);
         uint32_t value32_mov_x0_0 = 0xD2800000; // mov x0, #0x0
         // _entry: prevent busy-loop (data section):
         // 240000024: data_242140108 = 0x4 should set
@@ -608,12 +607,6 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         address_space_write(&address_space_memory, SEPROM_BASE + 0x0b574,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
                             sizeof(value32_mov_x0_0));
-
-        // load_sepos: jump over
-        // img4_compare_verified_values_true_on_success
-        address_space_write(&address_space_memory, SEPROM_BASE + 0x06234,
-                            MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_1,
-                            sizeof(value32_mov_x0_1));
 
         // maybe_verify_rsa_signature: return
         // fake return value
