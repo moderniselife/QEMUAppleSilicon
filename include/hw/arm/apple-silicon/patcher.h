@@ -1,5 +1,5 @@
 /*
- * ChefKiss Patch Finder (PenguinWizardryC).
+ * ChefKiss Patcher (PenguinWizardryC).
  *
  * Copyright (c) 2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  *
@@ -17,8 +17,8 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef HW_ARM_APPLE_SILICON_PF_H
-#define HW_ARM_APPLE_SILICON_PF_H
+#ifndef HW_ARM_APPLE_SILICON_PATCHER_H
+#define HW_ARM_APPLE_SILICON_PATCHER_H
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
@@ -30,26 +30,27 @@ typedef struct {
     /// Guaranteed to be an accessible host pointer.
     void *ptr;
     const char *name;
-} CkPfRange;
+} CKPatcherRange;
 
 /// Precondition: `insn` must be masked.
-void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask, uint32_t skip);
+void *ck_patcher_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
+                                uint32_t mask, uint32_t skip);
 /// Precondition: `insn` must be masked.
-void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask, uint32_t skip);
+void *ck_patcher_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
+                                uint32_t mask, uint32_t skip);
 
 /// Callback function prototype. `ctx` may be null.
-typedef bool (*CkPfCallback)(void *ctx, uint8_t *buffer);
+typedef bool (*CKPatcherCallback)(void *ctx, uint8_t *buffer);
 
 /// Precondition: bytes in `find` must be masked.
-void ck_pf_find_callback(CkPfRange *range, const char *name,
-                         const uint8_t *find, const uint8_t *mask, size_t count,
-                         CkPfCallback callback);
+void ck_patcher_find_callback(CKPatcherRange *range, const char *name,
+                              const uint8_t *find, const uint8_t *mask,
+                              size_t count, CKPatcherCallback callback);
 /// Precondition: bytes in `find` must be masked.
-void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
-                        const uint8_t *mask, size_t count,
-                        const uint8_t *replace, const uint8_t *replace_mask,
-                        size_t replace_off, size_t replace_count);
+void ck_patcher_find_replace(CKPatcherRange *range, const char *name,
+                             const uint8_t *find, const uint8_t *mask,
+                             size_t count, const uint8_t *replace,
+                             const uint8_t *replace_mask, size_t replace_off,
+                             size_t replace_count);
 
-#endif /* HW_ARM_APPLE_SILICON_PF_H */
+#endif /* HW_ARM_APPLE_SILICON_PATCHER_H */

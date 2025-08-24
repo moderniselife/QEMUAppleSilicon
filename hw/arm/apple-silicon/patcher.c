@@ -1,5 +1,5 @@
 /*
- * ChefKiss Patch Finder (PenguinWizardryC).
+ * ChefKiss Patcher (PenguinWizardryC).
  *
  * Copyright (c) 2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  *
@@ -17,15 +17,15 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "hw/arm/apple-silicon/pf.h"
+#include "hw/arm/apple-silicon/patcher.h"
 #include "qemu/bswap.h"
 #include "qemu/error-report.h"
 #include <string.h>
 
-static void ck_pf_find_callback_ctx(CkPfRange *range, const char *name,
-                                    const uint8_t *find, const uint8_t *mask,
-                                    size_t count, void *ctx,
-                                    CkPfCallback callback)
+static void ck_patcher_find_callback_ctx(CKPatcherRange *range,
+                                         const char *name, const uint8_t *find,
+                                         const uint8_t *mask, size_t count,
+                                         void *ctx, CKPatcherCallback callback)
 {
     size_t i;
     size_t match_i;
@@ -63,11 +63,12 @@ static void ck_pf_find_callback_ctx(CkPfRange *range, const char *name,
     }
 }
 
-void ck_pf_find_callback(CkPfRange *range, const char *name,
-                         const uint8_t *find, const uint8_t *mask, size_t count,
-                         CkPfCallback callback)
+void ck_patcher_find_callback(CKPatcherRange *range, const char *name,
+                              const uint8_t *find, const uint8_t *mask,
+                              size_t count, CKPatcherCallback callback)
 {
-    ck_pf_find_callback_ctx(range, name, find, mask, count, NULL, callback);
+    ck_patcher_find_callback_ctx(range, name, find, mask, count, NULL,
+                                 callback);
 }
 
 typedef struct {
@@ -75,11 +76,11 @@ typedef struct {
     const uint8_t *mask;
     size_t offset;
     size_t count;
-} CkPfFindReplaceCtx;
+} CKPatcherFindReplaceContext;
 
-static bool ck_pf_find_replace_callback(void *ctx, uint8_t *buffer)
+static bool ck_patcher_find_replace_callback(void *ctx, uint8_t *buffer)
 {
-    CkPfFindReplaceCtx *repl_ctx;
+    CKPatcherFindReplaceContext *repl_ctx;
     size_t i;
 
     repl_ctx = ctx;
@@ -95,12 +96,13 @@ static bool ck_pf_find_replace_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
-                        const uint8_t *mask, size_t count,
-                        const uint8_t *replace, const uint8_t *replace_mask,
-                        size_t replace_off, size_t replace_count)
+void ck_patcher_find_replace(CKPatcherRange *range, const char *name,
+                             const uint8_t *find, const uint8_t *mask,
+                             size_t count, const uint8_t *replace,
+                             const uint8_t *replace_mask, size_t replace_off,
+                             size_t replace_count)
 {
-    CkPfFindReplaceCtx ctx;
+    CKPatcherFindReplaceContext ctx;
 
     g_assert_cmphex(replace_off + replace_count, <=, count);
 
@@ -109,12 +111,12 @@ void ck_pf_find_replace(CkPfRange *range, const char *name, const uint8_t *find,
     ctx.offset = replace_off;
     ctx.count = replace_count;
 
-    ck_pf_find_callback_ctx(range, name, find, mask, count, &ctx,
-                            ck_pf_find_replace_callback);
+    ck_patcher_find_callback_ctx(range, name, find, mask, count, &ctx,
+                                 ck_patcher_find_replace_callback);
 }
 
-void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask, uint32_t skip)
+void *ck_patcher_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
+                                uint32_t mask, uint32_t skip)
 {
     g_assert_cmphex(insn & mask, ==, insn);
 
@@ -132,8 +134,8 @@ void *ck_pf_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
     return NULL;
 }
 
-void *ck_pf_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
-                           uint32_t mask, uint32_t skip)
+void *ck_patcher_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
+                                uint32_t mask, uint32_t skip)
 {
     g_assert_cmphex(insn & mask, ==, insn);
 

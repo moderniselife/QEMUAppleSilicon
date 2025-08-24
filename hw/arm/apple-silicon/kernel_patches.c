@@ -18,7 +18,7 @@
  */
 
 #include "hw/arm/apple-silicon/kernel_patches.h"
-#include "hw/arm/apple-silicon/pf.h"
+#include "hw/arm/apple-silicon/patcher.h"
 #include "qemu/bitops.h"
 #include "qemu/error-report.h"
 
@@ -28,10 +28,10 @@
 #define RETAB (0xD65F0FFF)
 #define PACIBSP (0xD503237F)
 
-static CkPfRange *ck_kp_range_from_va(const char *name, hwaddr base,
-                                      hwaddr size)
+static CKPatcherRange *ck_kp_range_from_va(const char *name, hwaddr base,
+                                           hwaddr size)
 {
-    CkPfRange *range = g_new0(CkPfRange, 1);
+    CKPatcherRange *range = g_new0(CKPatcherRange, 1);
     range->addr = base;
     range->length = size;
     range->ptr = xnu_va_to_ptr(base);
@@ -39,9 +39,9 @@ static CkPfRange *ck_kp_range_from_va(const char *name, hwaddr base,
     return range;
 }
 
-static CkPfRange *ck_kp_find_section_range(MachoHeader64 *header,
-                                           const char *segment_name,
-                                           const char *section_name)
+static CKPatcherRange *ck_kp_find_section_range(MachoHeader64 *header,
+                                                const char *segment_name,
+                                                const char *section_name)
 {
     MachoSection64 *sec;
     MachoSegmentCommand64 *seg;
@@ -71,10 +71,10 @@ static MachoHeader64 *ck_kp_find_xnu_image_header(MachoHeader64 *kheader,
         return macho_get_fileset_header(kheader, kext_bundle_id);
     }
 
-    g_autofree CkPfRange *kmod_info_range =
+    g_autofree CKPatcherRange *kmod_info_range =
         ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__kmod_info");
     if (kmod_info_range == NULL) {
-        g_autofree CkPfRange *kext_info_range =
+        g_autofree CKPatcherRange *kext_info_range =
             ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__info");
         if (kext_info_range == NULL) {
             error_report("Unsupported XNU.");
@@ -137,7 +137,7 @@ static MachoHeader64 *ck_kp_find_xnu_image_header(MachoHeader64 *kheader,
 
         return NULL;
     }
-    g_autofree CkPfRange *kmod_start_range =
+    g_autofree CKPatcherRange *kmod_start_range =
         ck_kp_find_section_range(kheader, "__PRELINK_INFO", "__kmod_start");
     if (kmod_start_range != NULL) {
         info = (uint64_t *)kmod_info_range->ptr;
@@ -154,7 +154,7 @@ static MachoHeader64 *ck_kp_find_xnu_image_header(MachoHeader64 *kheader,
     return NULL;
 }
 
-static CkPfRange *ck_kp_get_kernel_text(MachoHeader64 *header)
+static CKPatcherRange *ck_kp_get_kernel_text(MachoHeader64 *header)
 {
     if (header->file_type == MH_FILESET) {
         MachoHeader64 *kernel =
@@ -167,7 +167,7 @@ static CkPfRange *ck_kp_get_kernel_text(MachoHeader64 *header)
     return ck_kp_find_section_range(header, "__TEXT_EXEC", "__text");
 }
 
-static void ck_kp_apfs_patches(CkPfRange *range)
+static void ck_kp_apfs_patches(CKPatcherRange *range)
 {
     uint8_t find_root_auth[] = {
         0x68, 0x00, 0x28, 0x37, // tbnz w8, 5, 0xC
@@ -176,9 +176,9 @@ static void ck_kp_apfs_patches(CkPfRange *range)
     };
     uint8_t repl_root_auth[] = { NOP_BYTES, 0x00, 0x00, 0x80,
                                  0x52 }; // mov w0, #0
-    ck_pf_find_replace(range, "bypass root authentication", find_root_auth,
-                       NULL, sizeof(find_root_auth), repl_root_auth, NULL, 0,
-                       sizeof(repl_root_auth));
+    ck_patcher_find_replace(range, "bypass root authentication", find_root_auth,
+                            NULL, sizeof(find_root_auth), repl_root_auth, NULL,
+                            0, sizeof(repl_root_auth));
 
     uint8_t find_root_rw[] = {
         0x00, 0x00, 0x70, 0x37, // tbnz w0, 0xE, ?
@@ -191,9 +191,9 @@ static void ck_kp_apfs_patches(CkPfRange *range)
         0x00, 0xFC, 0xFF, 0xFF, 0xA0, 0x03, 0xC0, 0xFF,
     };
     uint8_t repl_root_rw[] = { 0x00, 0x00, 0x80, 0x52 }; // mov w0, #0
-    ck_pf_find_replace(range, "allow mounting root as r/w", find_root_rw,
-                       mask_root_rw, sizeof(find_root_rw), repl_root_rw, NULL,
-                       0, sizeof(repl_root_rw));
+    ck_patcher_find_replace(range, "allow mounting root as r/w", find_root_rw,
+                            mask_root_rw, sizeof(find_root_rw), repl_root_rw,
+                            NULL, 0, sizeof(repl_root_rw));
 }
 
 static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
@@ -203,20 +203,22 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
         return false;
     }
 
-    void *ldrb = ck_pf_find_next_insn(buffer, 256, 0x39402C00, 0xFFFFFC00, 0);
+    void *ldrb =
+        ck_patcher_find_next_insn(buffer, 256, 0x39402C00, 0xFFFFFC00, 0);
     uint32_t cdhash_param = extract32(ldl_le_p(ldrb), 5, 5);
     void *frame;
     void *start = buffer;
     bool pac;
 
-    frame = ck_pf_find_prev_insn(buffer, 10, 0x910003FD, 0xFF8003FF, 0);
+    frame = ck_patcher_find_prev_insn(buffer, 10, 0x910003FD, 0xFF8003FF, 0);
     if (frame == NULL) {
         info_report("%s: Found AMFI (Leaf)", __func__);
     } else {
         info_report("%s: Found AMFI (Routine)", __func__);
-        start = ck_pf_find_prev_insn(frame, 10, 0xA9A003E0, 0xFFE003E0, 0);
+        start = ck_patcher_find_prev_insn(frame, 10, 0xA9A003E0, 0xFFE003E0, 0);
         if (start == NULL) {
-            start = ck_pf_find_prev_insn(frame, 10, 0xD10003FF, 0xFF8003FF, 0);
+            start =
+                ck_patcher_find_prev_insn(frame, 10, 0xD10003FF, 0xFF8003FF, 0);
             if (start == NULL) {
                 error_report("%s: Failed to find AMFI start", __func__);
                 return false;
@@ -224,11 +226,12 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
         }
     }
 
-    pac = ck_pf_find_prev_insn(start, 5, PACIBSP, 0xFFFFFFFF, 0) != NULL;
+    pac = ck_patcher_find_prev_insn(start, 5, PACIBSP, 0xFFFFFFFF, 0) != NULL;
     switch (cdhash_param) {
     case 0: {
         // adrp x8, ?
-        void *adrp = ck_pf_find_prev_insn(start, 10, 0x90000008, 0x9F00001F, 0);
+        void *adrp =
+            ck_patcher_find_prev_insn(start, 10, 0x90000008, 0x9F00001F, 0);
         if (adrp != NULL) {
             start = adrp;
         }
@@ -251,7 +254,7 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
     return false;
 }
 
-static void ck_kp_tc_patch(CkPfRange *range)
+static void ck_kp_tc_patch(CKPatcherRange *range)
 {
     uint8_t find[] = {
         0x00, 0x02, 0x80, 0x52, // mov w?, 0x16
@@ -260,13 +263,14 @@ static void ck_kp_tc_patch(CkPfRange *range)
     };
     uint8_t mask[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
                        0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
-    ck_pf_find_callback(range, "AMFI, all binaries in trustcache", find, mask,
-                        sizeof(find), ck_kp_tc_callback);
+    ck_patcher_find_callback(range, "AMFI, all binaries in trustcache", find,
+                             mask, sizeof(find), ck_kp_tc_callback);
 }
 
 static bool ck_kp_tc_ios16_callback(void *ctx, uint8_t *buffer)
 {
-    void *start = ck_pf_find_prev_insn(buffer, 100, PACIBSP, 0xFFFFFFFF, 0);
+    void *start =
+        ck_patcher_find_prev_insn(buffer, 100, PACIBSP, 0xFFFFFFFF, 0);
 
     if (start == NULL) {
         return false;
@@ -278,18 +282,18 @@ static bool ck_kp_tc_ios16_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kp_tc_ios16_patch(CkPfRange *range)
+static void ck_kp_tc_ios16_patch(CKPatcherRange *range)
 {
     uint8_t find[] = { 0xC0, 0xCF, 0x9D, 0xD2 }; // mov w?, 0xEE7E
     uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
-    ck_pf_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
-                        find, mask, sizeof(find), ck_kp_tc_ios16_callback);
+    ck_patcher_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
+                             find, mask, sizeof(find), ck_kp_tc_ios16_callback);
 }
 
 static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
 {
-    void *cmp = ck_pf_find_next_insn(buffer, 0x10, 0x7100081F, 0xFFFFFFFF,
-                                     0); // cmp w0, 2
+    void *cmp = ck_patcher_find_next_insn(buffer, 0x10, 0x7100081F, 0xFFFFFFFF,
+                                          0); // cmp w0, 2
 
     if (cmp == NULL) {
         error_report("%s: failed to find cmp", __func__);
@@ -300,21 +304,21 @@ static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kp_amfi_kext_patches(CkPfRange *range)
+static void ck_kp_amfi_kext_patches(CKPatcherRange *range)
 {
     uint8_t find[] = { 0x02, 0x00, 0xD0, 0x36 }; // tbz w2, 0x1A, ?
     uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
-    ck_pf_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
-                        sizeof(find), ck_kp_amfi_sha1);
+    ck_patcher_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
+                             sizeof(find), ck_kp_amfi_sha1);
 }
 
 static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
 {
     void *mac_mount =
-        ck_pf_find_prev_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
+        ck_patcher_find_prev_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
     if (mac_mount == NULL) {
         mac_mount =
-            ck_pf_find_next_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
+            ck_patcher_find_next_insn(buffer, 0x40, 0x37280000, 0xFFFE0000, 0);
         if (mac_mount == NULL) {
             error_report("%s: failed to find nop point", __func__);
             return false;
@@ -325,10 +329,11 @@ static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
     stl_le_p(mac_mount, NOP);
 
     // Search for ldrb w8, [x?, 0x71]
-    mac_mount = ck_pf_find_prev_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
+    mac_mount =
+        ck_patcher_find_prev_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
     if (mac_mount == NULL) {
         mac_mount =
-            ck_pf_find_next_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
+            ck_patcher_find_next_insn(buffer, 0x40, 0x3941C408, 0xFFFFFC1F, 0);
         if (mac_mount == NULL) {
             error_report("%s: failed to find xzr point", __func__);
             return false;
@@ -342,19 +347,19 @@ static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kp_mac_mount_patch(CkPfRange *range)
+static void ck_kp_mac_mount_patch(CKPatcherRange *range)
 {
     uint8_t find_old[] = { 0xE9, 0x2F, 0x1F, 0x32 }; // orr w9, wzr, 0x1FFE
-    ck_pf_find_callback(range, "allow remounting rootfs, union mounts (old)",
-                        find_old, NULL, sizeof(find_old),
-                        ck_kp_mac_mount_callback);
+    ck_patcher_find_callback(
+        range, "allow remounting rootfs, union mounts (old)", find_old, NULL,
+        sizeof(find_old), ck_kp_mac_mount_callback);
     uint8_t find_new[] = { 0xC9, 0xFF, 0x83, 0x52 }; // movz w9, 0x1FFE
-    ck_pf_find_callback(range, "allow remounting rootfs, union mounts (new)",
-                        find_new, NULL, sizeof(find_new),
-                        ck_kp_mac_mount_callback);
+    ck_patcher_find_callback(
+        range, "allow remounting rootfs, union mounts (new)", find_new, NULL,
+        sizeof(find_new), ck_kp_mac_mount_callback);
 }
 
-static void ck_kp_kprintf_patch(CkPfRange *range)
+static void ck_kp_kprintf_patch(CKPatcherRange *range)
 {
     uint8_t find[] = {
         0xAA, 0x43, 0x00, 0x91, // add x10, fp, #0x10
@@ -365,15 +370,15 @@ static void ck_kp_kprintf_patch(CkPfRange *range)
     uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                        0x1F, 0xFC, 0xE0, 0xFF, 0x1F, 0x00, 0x00, 0xFF };
     uint8_t replace[] = { 0xE8, 0x03, 0x1F, 0x2A };
-    ck_pf_find_replace(range, "force enable kprintf", find, mask, sizeof(find),
-                       replace, NULL, 8, sizeof(replace));
+    ck_patcher_find_replace(range, "force enable kprintf", find, mask,
+                            sizeof(find), replace, NULL, 8, sizeof(replace));
 }
 
 static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
 {
     stl_le_p(buffer, 0x52810009); // mov w9, #0x800
     void *amx_ver_str =
-        ck_pf_find_prev_insn(buffer, 10, 0xB800000A, 0xFEC0001F, 1);
+        ck_patcher_find_prev_insn(buffer, 10, 0xB800000A, 0xFEC0001F, 1);
     if (amx_ver_str == NULL) {
         error_report("%s: Failed to find gAMXVersion store.", __func__);
         return false;
@@ -382,34 +387,34 @@ static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kp_amx_patch(CkPfRange *range)
+static void ck_kp_amx_patch(CKPatcherRange *range)
 {
     uint8_t find[] = {
         0xE9, 0x83, 0x05, 0x32, // mov w9, #0x8000800
         0x09, 0x00, 0x00, 0xAA, // orr x9, x?, x?
     };
     uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF };
-    ck_pf_find_callback(range, "disable AMX", find, mask, sizeof(find),
-                        ck_kp_amx_callback);
+    ck_patcher_find_callback(range, "disable AMX", find, mask, sizeof(find),
+                             ck_kp_amx_callback);
 }
 
-static void ck_kp_apfs_snapshot_patch(CkPfRange *range)
+static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
 {
     uint8_t find[] = "com.apple.os.update-";
     uint8_t repl[] = { 0x00 }; // null byte
-    ck_pf_find_replace(range, "Disable APFS snapshots", find, NULL,
-                       sizeof(find), repl, NULL, 0, sizeof(repl));
+    ck_patcher_find_replace(range, "Disable APFS snapshots", find, NULL,
+                            sizeof(find), repl, NULL, 0, sizeof(repl));
 }
 
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
     MachoHeader64 *apfs_header;
-    g_autofree CkPfRange *apfs_text_exec;
-    g_autofree CkPfRange *apfs_cstring;
+    g_autofree CKPatcherRange *apfs_text_exec;
+    g_autofree CKPatcherRange *apfs_cstring;
     MachoHeader64 *amfi_hdr;
-    g_autofree CkPfRange *amfi_text_exec;
-    g_autofree CkPfRange *text_exec;
-    g_autofree CkPfRange *ppltext_exec;
+    g_autofree CKPatcherRange *amfi_text_exec;
+    g_autofree CKPatcherRange *text_exec;
+    g_autofree CKPatcherRange *ppltext_exec;
 
     apfs_header =
         ck_kp_find_xnu_image_header(hdr, "com.apple.filesystems.apfs");
