@@ -154,17 +154,19 @@ static MachoHeader64 *ck_kp_find_xnu_image_header(MachoHeader64 *kheader,
     return NULL;
 }
 
-static CKPatcherRange *ck_kp_get_kernel_text(MachoHeader64 *header)
+static CKPatcherRange *ck_kp_get_kernel_section(MachoHeader64 *header,
+                                                const char *segment,
+                                                const char *section)
 {
     if (header->file_type == MH_FILESET) {
         MachoHeader64 *kernel =
             ck_kp_find_xnu_image_header(header, "com.apple.kernel");
         return kernel == NULL ?
                    NULL :
-                   ck_kp_find_section_range(kernel, "__TEXT_EXEC", "__text");
+                   ck_kp_find_section_range(kernel, segment, section);
     }
 
-    return ck_kp_find_section_range(header, "__TEXT_EXEC", "__text");
+    return ck_kp_find_section_range(header, segment, section);
 }
 
 static void ck_kp_apfs_patches(CKPatcherRange *range)
@@ -406,22 +408,40 @@ static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
                             sizeof(find), repl, NULL, 0, sizeof(repl));
 }
 
+// this will tell launchd this is an internal build,
+// and that way we can get hactivation without bypassing
+// or patching the activation procedure.
+// This is NOT an iCloud bypass. This is utilising code that ALREADY exists
+// in the activation daemon. This is essentially telling iOS, it's a
+// development kernel/device, NOT the real product sold on market. IF you
+// decide to use this knowledge to BYPASS technological countermeasures
+// or any other intellectual theft or crime, YOU are responsible in full,
+// AND SHOULD BE PROSECUTED TO THE FULL EXTENT OF THE LAW.
+// We do NOT endorse nor approve the theft of property.
+static void ck_kp_hactivation_patch(CKPatcherRange *range)
+{
+    uint8_t find[] = "\0release";
+    uint8_t repl[] = "profile";
+    ck_patcher_find_replace(
+        range, "Enable hactivation (by changing osbuild_config to profile)",
+        find, NULL, sizeof(find), repl, NULL, 1, sizeof(repl));
+}
+
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
-    MachoHeader64 *apfs_header;
-    g_autofree CKPatcherRange *apfs_text_exec;
+    MachoHeader64 *apfs_hdr;
+    g_autofree CKPatcherRange *apfs_text;
     g_autofree CKPatcherRange *apfs_cstring;
     MachoHeader64 *amfi_hdr;
-    g_autofree CKPatcherRange *amfi_text_exec;
-    g_autofree CKPatcherRange *text_exec;
+    g_autofree CKPatcherRange *amfi_text;
+    g_autofree CKPatcherRange *kernel_text;
+    g_autofree CKPatcherRange *kernel_const;
     g_autofree CKPatcherRange *ppltext_exec;
 
-    apfs_header =
-        ck_kp_find_xnu_image_header(hdr, "com.apple.filesystems.apfs");
-    apfs_text_exec =
-        ck_kp_find_section_range(apfs_header, "__TEXT_EXEC", "__text");
-    ck_kp_apfs_patches(apfs_text_exec);
-    apfs_cstring = ck_kp_find_section_range(apfs_header, "__TEXT", "__cstring");
+    apfs_hdr = ck_kp_find_xnu_image_header(hdr, "com.apple.filesystems.apfs");
+    apfs_text = ck_kp_find_section_range(apfs_hdr, "__TEXT_EXEC", "__text");
+    ck_kp_apfs_patches(apfs_text);
+    apfs_cstring = ck_kp_find_section_range(apfs_hdr, "__TEXT", "__cstring");
     if (apfs_cstring == NULL) {
         apfs_cstring = ck_kp_find_section_range(hdr, "__TEXT", "__cstring");
     }
@@ -429,15 +449,16 @@ void ck_patch_kernel(MachoHeader64 *hdr)
 
     amfi_hdr = ck_kp_find_xnu_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");
-    amfi_text_exec =
-        ck_kp_find_section_range(amfi_hdr, "__TEXT_EXEC", "__text");
-    ck_kp_amfi_kext_patches(amfi_text_exec);
+    amfi_text = ck_kp_find_section_range(amfi_hdr, "__TEXT_EXEC", "__text");
+    ck_kp_amfi_kext_patches(amfi_text);
 
-    text_exec = ck_kp_get_kernel_text(hdr);
-    ck_kp_tc_patch(text_exec);
-    ck_kp_mac_mount_patch(text_exec);
-    ck_kp_kprintf_patch(text_exec);
-    ck_kp_amx_patch(text_exec);
+    kernel_text = ck_kp_get_kernel_section(hdr, "__TEXT_EXEC", "__text");
+    ck_kp_tc_patch(kernel_text);
+    ck_kp_mac_mount_patch(kernel_text);
+    ck_kp_kprintf_patch(kernel_text);
+    ck_kp_amx_patch(kernel_text);
+    kernel_const = ck_kp_get_kernel_section(hdr, "__TEXT", "__const");
+    ck_kp_hactivation_patch(kernel_const);
 
     ppltext_exec = ck_kp_find_section_range(hdr, "__PPLTEXT", "__text");
     if (ppltext_exec == NULL) {

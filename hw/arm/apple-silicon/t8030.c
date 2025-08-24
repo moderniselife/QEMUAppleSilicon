@@ -192,30 +192,10 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     *(uint32_t *)vtop_slid(0xFFFFFFF008B58030) = cpu_to_le32(0x52A00028);
 #endif
 
-    // Disable check for `PE_i_can_has_debugger` in MTSPI/MTDevice code
-    // so we can use the boot arguments `mt-strings=1 mt-bytes=1`.
-    *(uint32_t *)vtop_slid(0xFFFFFFF0085D70E4) = nop;
-    *(uint32_t *)vtop_slid(0xFFFFFFF0087A5854) = nop;
-
-    // Enable all AppleImage4 logs.
-    // *(uint32_t *)vtop_slid(0xFFFFFFF008387A28) = nop;
-
     // Force call to `Img4DecodePerformTrustEvaluationWithCallbacks` return
     // value check to pass.
     *(uint32_t *)vtop_slid(0xFFFFFFF00838030C) = cpu_to_le32(0x52800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF008380310) = nop;
-
-    // this will tell launchd this is an internal build,
-    // and that way we can get hactivation without bypassing
-    // or patching the activation procedure.
-    // This is NOT an iCloud bypass. This is utilising code that ALREADY exists
-    // in the activation daemon. This is essentially telling iOS, it's a
-    // development kernel/device, NOT the real product sold on market. IF you
-    // decide to use this knowledge to BYPASS technological countermeasures
-    // or any other intellectual theft or crime, YOU are responsible in full,
-    // AND SHOULD BE PROSECUTED TO THE FULL EXTENT OF THE LAW.
-    // We do NOT endorse nor approve the theft of property.
-    memcpy((char *)vtop_slid(0xFFFFFFF00703884E), "profile", 8);
 
     // _doprnt_hide_pointers = false;
     *(uint32_t *)vtop_slid(0xFFFFFFF00981061C) = 0;
@@ -659,20 +639,6 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
                             t8030_machine->soc_base_pa + 0x42140108,
                             MEMTXATTRS_UNSPECIFIED, &value, sizeof(value));
 
-        // image4_validate_property_callback: skip AMNM
-        // address_space_write(&address_space_memory, SEPROM_BASE +
-        // 0x0D2C8,
-        //                     MEMTXATTRS_UNSPECIFIED, &value32_nop,
-        //                     sizeof(value32_nop));
-
-        // maybe_Img4DecodeEvaluateTrust: Skip RSA verification result.
-        // not actually stuck, it just takes a while to complete while GDB is in
-        // use.
-        // address_space_write(&address_space_memory, SEPROM_BASE +
-        // 0x1130c,
-        //                     MEMTXATTRS_UNSPECIFIED, &value32_nop,
-        //                     sizeof(value32_nop));
-
         // maybe_Img4DecodeEvaluateTrust: payload_raw
         // hashing stuck, nop'ing
         address_space_write(&address_space_memory, SEPROM_BASE + 0x113b0,
@@ -706,42 +672,6 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         address_space_write(&address_space_memory, SEPROM_BASE + 0x11630,
                             MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
                             sizeof(value32_mov_x0_0));
-
-        // `AppleSEPBooter::getBootTimeout`:
-        // increase timeout for debugging (GDB tracing). The
-        // `_initTimeoutMultiplier` change is preferred compared to this.
-        // *(uint32_t *)vtop_slid(0xFFFFFFF008B4E018) =
-        // value32_mov_w0_0x10000000;
-
-        // `AppleSEPManager::_tracingEnabled`: Don't require
-        // `PE_i_can_has_debugger`.
-        //*(uint32_t *)vtop_slid(0xFFFFFFF008B576B4) = value32_nop;
-
-        // `AppleSEPManager::_bootSEP`: Don't require `PE_i_can_has_debugger`.
-        // *(uint32_t *)vtop_slid(0xFFFFFFF008B57AD4) = value32_mov_x0_1;
-
-        // `AppleSEPManager::_initPMControl`: Don't require
-        // `PE_i_can_has_debugger`.
-        // *(uint32_t *)vtop_slid(0xFFFFFFF008B56B18) = value32_nop;
-
-        // _kern_config_is_development
-        // *(uint32_t *)vtop_slid(0xFFFFFFF007A231D8) = value32_mov_x0_1;
-
-        // `AppleSEPManager::_initTimeoutMultiplier`:
-        // Increasing the FastSIM timeout. Conflicts with getBootTimeout.
-        // *(uint32_t *)vtop_slid(0xFFFFFFF008B56AA4) = value32_mov_w8_0x1000;
-
-        // `SEP::_kern_register_coredump_helper`: Needed for
-        // the bootSEP patch.
-        // *(uint32_t *)vtop_slid(0xFFFFFFF0079F95A8) = value32_mov_w0_0;
-
-        // `ApplePMGR::_cpuIdle`: skip time check
-        // *(uint32_t *)vtop_slid(0xFFFFFFF008794F24) = value32_mov_x0_0;
-
-        // memcmp_validstrs20: fake success
-        // address_space_write(&address_space_memory, SEPROM_BASE +
-        // 0x02A04, MEMTXATTRS_UNSPECIFIED, &value32_mov_x0_0,
-        // sizeof(value32_mov_x0_0));
 #endif // for T8030 SEPROM
     }
 
