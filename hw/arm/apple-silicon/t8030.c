@@ -166,27 +166,12 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     const uint32_t nop = cpu_to_le32(0xD503201F);
     const uint32_t ret = cpu_to_le32(0xD65F03C0);
 
-    // AppleSEPManager::_initTimeoutMultiplier 'sim' -> '  m'
-    *(uint32_t *)vtop_slid(0xFFFFFFF008B569E0) = cpu_to_le32(0x52840408);
-
 #ifndef ENABLE_SEP
     // Make all AppleSEPKeyStoreUserClient requests do nothing but return
     // success
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F774) = cpu_to_le32(0x52800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xD65F0FFF);
 #else
-    // re-enable it in case that the kernel is already patched
-    *(uint32_t *)vtop_slid(0xFFFFFFF008F6F774) = cpu_to_le32(0xD10783FF);
-    *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xA9186FFC);
-
-    // `AppleSEPManager::_tracingEnabled`: disable
-    // `PE_i_can_has_debugger` check, only rely on sep_tracing
-    *(uint32_t *)vtop_slid(0xFFFFFFF008B576B4) = nop;
-
-    // `AppleSEPManager::_bootSEP`: disable `PE_i_can_has_debugger`
-    // check, so it won't skip reading bootarg sep-trace-size
-    *(uint32_t *)vtop_slid(0xFFFFFFF008B57B28) = nop;
-
     // `AppleSEPManager::_loadChannelObjectEntries`:
     // use SCOT as TRAC, thus making it bigger: 0x10000 bytes instead of 0x20.
     *(uint32_t *)vtop_slid(0xFFFFFFF008B58030) = cpu_to_le32(0x52A00028);
@@ -196,9 +181,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     // value check to pass.
     *(uint32_t *)vtop_slid(0xFFFFFFF00838030C) = cpu_to_le32(0x52800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF008380310) = nop;
-
-    // _doprnt_hide_pointers = false;
-    *(uint32_t *)vtop_slid(0xFFFFFFF00981061C) = 0;
 
     // _ubc_cs_check_validation_bitmap return 0
     *(uint32_t *)vtop_slid(0xFFFFFFF007EBDF40) = cpu_to_le32(0xD2800000);
@@ -211,16 +193,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     // pmap_cs_enforce return 0
     *(uint32_t *)vtop_slid(0xFFFFFFF0097EB5A8) = cpu_to_le32(0xD2800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF0097EB5AC) = ret;
-
-    // AppleAOPAudioLog::mLogLevel = LogLevelDebug;
-    *(uint32_t *)vtop_slid(0xFFFFFFF009881658) = cpu_to_le32(4);
-
-    // Neutralise IOAppleConvergedIPCLogger::obfuscateIOMMUAddr.
-    *(uint32_t *)vtop_slid(0xFFFFFFF0081C51E4) = nop;
-    // Neutralise _buf_kernel_addrperm_addr; mov x8, #0x0.
-    *(uint32_t *)vtop_slid(0xFFFFFFF007BCFC90) = cpu_to_le32(0xD2800008);
-    // No-op `PE_i_can_has_debugger` inside `AppleBaseband::loadBootArguments`.
-    *(uint32_t *)vtop_slid(0xFFFFFFF0093B309C) = nop;
 }
 
 static bool t8030_check_panic(T8030MachineState *t8030_machine)
@@ -293,8 +265,6 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     hwaddr amcc_lower;
     hwaddr amcc_upper;
     AppleBootInfo *info = &t8030_machine->boot_info;
-    hwaddr last_base;
-    MachoSegmentCommand64 *last_seg;
     hwaddr text_base;
     DTBNode *memory_map =
         dtb_get_node(t8030_machine->device_tree, "/chosen/memory-map");
@@ -305,8 +275,6 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
 
     get_kaslr_slides(t8030_machine, &g_phys_slide, &g_virt_slide);
 
-    last_seg = macho_get_segment(hdr, "__LAST");
-    last_base = last_seg->vmaddr;
     text_base = macho_get_segment(hdr, "__TEXT")->vmaddr;
 
     g_phys_base = DRAM_BASE;
@@ -410,15 +378,12 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     AppleBootInfo *info = &t8030_machine->boot_info;
     uint64_t extradata_size;
     uint64_t l2_remaining;
-    MachoSegmentCommand64 *prelink_info_seg;
     DTBNode *memory_map =
         dtb_get_node(t8030_machine->device_tree, "/chosen/memory-map");
 
     g_phys_base = (hwaddr)macho_get_buffer(hdr);
     macho_highest_lowest(hdr, &virt_low, &virt_end);
     g_virt_base = virt_low;
-
-    prelink_info_seg = macho_get_segment(hdr, "__PRELINK_INFO");
 
     extradata_size =
         ROUND_UP_16K(info->device_tree_size + info->trustcache_size);
@@ -623,33 +588,16 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
 
         g_free(seprom);
 
+#if 1 // for T8030 SEPROM
         uint64_t value = 0x8000000000000000;
         uint32_t value32_mov_x0_1 = 0xD2800020; // mov x0, #0x1
         uint32_t value32_mov_x0_0 = 0xD2800000; // mov x0, #0x0
-        uint32_t value32_nop = 0xD503201F; // nop
-        // mov w0, #0x10000000
-        // uint32_t value32_mov_w0_0x10000000 = 0x52a20000;
-        // uint32_t value32_mov_w0_0 = 0x52800000; // mov w0, #0x0
-        // uint32_t value32_mov_w8_0x1000 = 0x52820008;
-#if 1 // for T8030 SEPROM
-      // _entry: prevent busy-loop (data section):
-      // 240000024: data_242140108 = 0x4 should set
-      // (data_242140108 & 0x8000000000000000) != 0
+        // _entry: prevent busy-loop (data section):
+        // 240000024: data_242140108 = 0x4 should set
+        // (data_242140108 & 0x8000000000000000) != 0
         address_space_write(&address_space_memory,
                             t8030_machine->soc_base_pa + 0x42140108,
                             MEMTXATTRS_UNSPECIFIED, &value, sizeof(value));
-
-        // maybe_Img4DecodeEvaluateTrust: payload_raw
-        // hashing stuck, nop'ing
-        address_space_write(&address_space_memory, SEPROM_BASE + 0x113b0,
-                            MEMTXATTRS_UNSPECIFIED, &value32_nop,
-                            sizeof(value32_nop));
-
-        // maybe_Img4DecodeEvaluateTrust: nop'ing
-        // result of payload_raw hashing
-        address_space_write(&address_space_memory, SEPROM_BASE + 0x113b4,
-                            MEMTXATTRS_UNSPECIFIED, &value32_nop,
-                            sizeof(value32_nop));
 
         // memcmp_validstrs30: fake success
         address_space_write(&address_space_memory, SEPROM_BASE + 0x0963c,
