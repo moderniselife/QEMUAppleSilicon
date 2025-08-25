@@ -2391,7 +2391,7 @@ static void t8030_create_mca(T8030MachineState *t8030_machine)
                                 reg[7]);
 }
 
-static void t8030_create_audio_speaker_top(T8030MachineState *t8030_machine)
+static void t8030_create_speaker_top(T8030MachineState *t8030_machine)
 {
     DTBNode *child;
     DTBProp *prop;
@@ -2409,7 +2409,7 @@ static void t8030_create_audio_speaker_top(T8030MachineState *t8030_machine)
                             *(uint32_t *)prop->data);
 }
 
-static void t8030_create_audio_speaker_bottom(T8030MachineState *t8030_machine)
+static void t8030_create_speaker_bottom(T8030MachineState *t8030_machine)
 {
     AppleSPIState *spi;
     DeviceState *device;
@@ -2762,8 +2762,8 @@ static void t8030_machine_init(MachineState *machine)
     t8030_create_mt_spi(t8030_machine);
     t8030_create_aop(t8030_machine);
     t8030_create_mca(t8030_machine);
-    t8030_create_audio_speaker_top(t8030_machine);
-    t8030_create_audio_speaker_bottom(t8030_machine);
+    t8030_create_speaker_top(t8030_machine);
+    t8030_create_speaker_bottom(t8030_machine);
     t8030_create_buttons(t8030_machine);
 
     t8030_machine->init_done_notifier.notify = t8030_machine_init_done;
