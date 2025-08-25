@@ -2746,6 +2746,11 @@ static void t8030_machine_init(MachineState *machine)
     if (t8030_machine->sep_rom_filename && t8030_machine->sep_fw_filename) {
         t8030_create_sep(t8030_machine);
     } else {
+#ifdef ENABLE_DATA_ENCRYPTION
+        error_setg(&error_abort, "Simulated SEP cannot be used with data "
+                                 "encryption at the moment.");
+        return;
+#endif
         t8030_create_sep_sim(t8030_machine);
     }
 
