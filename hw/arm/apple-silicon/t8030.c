@@ -169,20 +169,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F774) = cpu_to_le32(0x52800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xD65F0FFF);
 #endif
-
-    const uint32_t ret = cpu_to_le32(0xD65F03C0);
-
-    // _ubc_cs_check_validation_bitmap return 0
-    *(uint32_t *)vtop_slid(0xFFFFFFF007EBDF40) = cpu_to_le32(0xD2800000);
-    *(uint32_t *)vtop_slid(0xFFFFFFF007EBDF44) = ret;
-
-    // _pmap_cs_enforce_library_validation return 0
-    *(uint32_t *)vtop_slid(0xFFFFFFF0097E4D2C) = cpu_to_le32(0xD2800000);
-    *(uint32_t *)vtop_slid(0xFFFFFFF0097E4D30) = ret;
-
-    // pmap_cs_enforce return 0
-    *(uint32_t *)vtop_slid(0xFFFFFFF0097EB5A8) = cpu_to_le32(0xD2800000);
-    *(uint32_t *)vtop_slid(0xFFFFFFF0097EB5AC) = ret;
 }
 
 static bool t8030_check_panic(T8030MachineState *t8030_machine)

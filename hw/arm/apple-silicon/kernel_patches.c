@@ -24,6 +24,8 @@
 #include "qemu/error-report.h"
 
 #define NOP (0xD503201F)
+#define MOV_W0_0 (0x52800000)
+#define MOV_W0_0_BYTES 0x00, 0x00, 0x80, 0x52
 #define NOP_BYTES 0x1F, 0x20, 0x03, 0xD5
 #define RET (0xD65F03C0)
 #define RETAB (0xD65F0FFF)
@@ -179,29 +181,29 @@ static CKPatcherRange *ck_kp_get_kernel_section(MachoHeader64 *hdr,
 
 static void ck_kp_apfs_patches(CKPatcherRange *range)
 {
-    uint8_t find_root_auth[] = {
+    static const uint8_t find_root_auth[] = {
         0x68, 0x00, 0x28, 0x37, // tbnz w8, 5, 0xC
         0X00, 0x0A, 0x80, 0x52, // mov w0, 0x50
         0xC0, 0x03, 0x5F, 0xD6, // ret
     };
-    uint8_t repl_root_auth[] = { NOP_BYTES, 0x00, 0x00, 0x80,
-                                 0x52 }; // mov w0, #0
+    static const uint8_t repl_root_auth[] = { NOP_BYTES, 0x00, 0x00, 0x80,
+                                              0x52 }; // mov w0, #0
     ck_patcher_find_replace(range, "bypass root authentication", find_root_auth,
                             NULL, sizeof(find_root_auth), repl_root_auth, NULL,
                             0, sizeof(repl_root_auth));
 
-    uint8_t find_root_rw[] = {
+    static const uint8_t find_root_rw[] = {
         0x00, 0x00, 0x70, 0x37, // tbnz w0, 0xE, ?
         0xA0, 0x03, 0x40, 0xB9, // ldr x?, [x29/sp, ?]
         0x00, 0x78, 0x1F, 0x12, // and w?, w?, 0xFFFFFFFE
         0xA0, 0x03, 0x00, 0xB9, // str x?, [x29/sp, ?]
     };
-    uint8_t mask_root_rw[] = {
+    static const uint8_t mask_root_rw[] = {
         0x1F, 0x00, 0xF8, 0xFF, 0xA0, 0x03, 0xFE, 0xFF,
         0x00, 0xFC, 0xFF, 0xFF, 0xA0, 0x03, 0xC0, 0xFF,
     };
     QEMU_BUILD_BUG_ON(sizeof(find_root_rw) != sizeof(mask_root_rw));
-    uint8_t repl_root_rw[] = { 0x00, 0x00, 0x80, 0x52 }; // mov w0, #0
+    static const uint8_t repl_root_rw[] = { MOV_W0_0_BYTES };
     ck_patcher_find_replace(range, "allow mounting root as r/w", find_root_rw,
                             mask_root_rw, sizeof(find_root_rw), repl_root_rw,
                             NULL, 0, sizeof(repl_root_rw));
@@ -268,13 +270,13 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
 
 static void ck_kp_tc_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = {
+    static const uint8_t find[] = {
         0x00, 0x02, 0x80, 0x52, // mov w?, 0x16
         0x00, 0x00, 0x00, 0xD3, // lsr ?
         0x00, 0x00, 0x00, 0x9B, // madd ?
     };
-    uint8_t mask[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
-                       0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
+    static const uint8_t mask[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
+                                    0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache", find,
                              mask, sizeof(find), ck_kp_tc_callback);
@@ -297,8 +299,8 @@ static bool ck_kp_tc_ios16_callback(void *ctx, uint8_t *buffer)
 
 static void ck_kp_tc_ios16_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = { 0xC0, 0xCF, 0x9D, 0xD2 }; // mov w?, 0xEE7E
-    uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
+    static const uint8_t find[] = { 0xC0, 0xCF, 0x9D, 0xD2 }; // mov w?, 0xEE7E
+    static const uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
                              find, mask, sizeof(find), ck_kp_tc_ios16_callback);
@@ -320,8 +322,8 @@ static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
 
 static void ck_kp_amfi_patches(CKPatcherRange *range)
 {
-    uint8_t find[] = { 0x02, 0x00, 0xD0, 0x36 }; // tbz w2, 0x1A, ?
-    uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
+    static const uint8_t find[] = { 0x02, 0x00, 0xD0, 0x36 }; // tbz w2, 0x1A, ?
+    static const uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
                              sizeof(find), ck_kp_amfi_sha1);
@@ -364,11 +366,13 @@ static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
 
 static void ck_kp_mac_mount_patch(CKPatcherRange *range)
 {
-    uint8_t find_old[] = { 0xE9, 0x2F, 0x1F, 0x32 }; // orr w9, wzr, 0x1FFE
+    static const uint8_t find_old[] = { 0xE9, 0x2F, 0x1F,
+                                        0x32 }; // orr w9, wzr, 0x1FFE
     ck_patcher_find_callback(
         range, "allow remounting rootfs, union mounts (old)", find_old, NULL,
         sizeof(find_old), ck_kp_mac_mount_callback);
-    uint8_t find_new[] = { 0xC9, 0xFF, 0x83, 0x52 }; // movz w9, 0x1FFE
+    static const uint8_t find_new[] = { 0xC9, 0xFF, 0x83,
+                                        0x52 }; // movz w9, 0x1FFE
     ck_patcher_find_callback(
         range, "allow remounting rootfs, union mounts (new)", find_new, NULL,
         sizeof(find_new), ck_kp_mac_mount_callback);
@@ -376,16 +380,17 @@ static void ck_kp_mac_mount_patch(CKPatcherRange *range)
 
 static void ck_kp_kprintf_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = {
+    static const uint8_t find[] = {
         0xAA, 0x43, 0x00, 0x91, // add x10, fp, #0x10
         0xEA, 0x07, 0x00, 0xF9, // str x10, [sp, #0x8]
         0x08, 0x00, 0x00, 0x2A, // orr w8, w?, w?
         0x08, 0x00, 0x00, 0x34, // cbz w8, #?
     };
-    uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                       0x1F, 0xFC, 0xE0, 0xFF, 0x1F, 0x00, 0x00, 0xFF };
+    static const uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                    0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF,
+                                    0x1F, 0x00, 0x00, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
-    uint8_t replace[] = { 0xE8, 0x03, 0x1F, 0x2A };
+    static const uint8_t replace[] = { 0xE8, 0x03, 0x1F, 0x2A };
     ck_patcher_find_replace(range, "force enable kprintf", find, mask,
                             sizeof(find), replace, NULL, 8, sizeof(replace));
 }
@@ -405,11 +410,12 @@ static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
 
 static void ck_kp_amx_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = {
+    static const uint8_t find[] = {
         0xE9, 0x83, 0x05, 0x32, // mov w9, #0x8000800
         0x09, 0x00, 0x00, 0xAA, // orr x9, x?, x?
     };
-    uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF };
+    static const uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF,
+                                    0x1F, 0xFC, 0xE0, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "disable AMX", find, mask, sizeof(find),
                              ck_kp_amx_callback);
@@ -417,8 +423,8 @@ static void ck_kp_amx_patch(CKPatcherRange *range)
 
 static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = "com.apple.os.update-";
-    uint8_t repl[] = "shitcode.os.bullshit";
+    static const uint8_t find[] = "com.apple.os.update-";
+    static const uint8_t repl[] = "shitcode.os.bullshit";
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(repl));
     ck_patcher_find_replace(range, "disable APFS snapshots", find, NULL,
                             sizeof(find), repl, NULL, 0, sizeof(repl));
@@ -436,23 +442,24 @@ static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
 // We do NOT endorse nor approve the theft of property.
 static void ck_kp_hactivation_patch(CKPatcherRange *range)
 {
-    uint8_t find[] = "\0release";
-    uint8_t repl[] = "profile";
+    static const uint8_t find[] = "\0release";
+    static const uint8_t repl[] = "profile";
     ck_patcher_find_replace(range, "enable hactivation", find, NULL,
                             sizeof(find), repl, NULL, 1, sizeof(repl));
 }
 
 static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
 {
-    uint8_t find[] = {
+    static const uint8_t find[] = {
         0x00, 0x04, 0x00, 0xF9, // str x?, [x?, #0x8]
         0x08, 0x04, 0x80, 0x52, // mov w8, #0x20
         0x08, 0x10, 0x00, 0xB9, // str w8, [x?, #0x10]
     };
-    uint8_t mask[] = { 0x00, 0xFC, 0xFF, 0xFF, 0xFF, 0xFF,
-                       0xFF, 0xFF, 0x1F, 0xFC, 0xFF, 0xFF };
+    static const uint8_t mask[] = { 0x00, 0xFC, 0xFF, 0xFF, 0xFF, 0xFF,
+                                    0xFF, 0xFF, 0x1F, 0xFC, 0xFF, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
-    uint8_t repl[] = { 0x28, 0x00, 0xA0, 0x52 }; // mov w8, #0x10000
+    static const uint8_t repl[] = { 0x28, 0x00, 0xA0,
+                                    0x52 }; // mov w8, #0x10000
     ck_patcher_find_replace(
         range, "increase SCOT size to 0x10000 to use it as TRAC", find, mask,
         sizeof(find), repl, NULL, 4, sizeof(repl));
@@ -460,19 +467,83 @@ static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
 
 static void ck_kp_img4_patches(CKPatcherRange *range)
 {
-    uint8_t find[] = {
+    static const uint8_t find[] = {
         0xE1, 0x03, 0x00, 0xAA, // mov x1, x?
         0x00, 0x00, 0x00, 0x94, // bl #?
         0x1F, 0x04, 0x00, 0x31, // cmn w0, #0x1
         0x00, 0x00, 0x00, 0x54, // b.eq #?
     };
-    uint8_t mask[] = { 0xFF, 0xFF, 0xE0, 0xFF, 0x00, 0x00, 0x00, 0xFC,
-                       0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0x00, 0xF8, 0xFF };
+    static const uint8_t mask[] = { 0xFF, 0xFF, 0xE0, 0xFF, 0x00, 0x00,
+                                    0x00, 0xFC, 0xFF, 0xFF, 0xFF, 0xFF,
+                                    0x1F, 0x00, 0xF8, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
-    uint8_t repl[] = { 0x00, 0x00, 0x80, 0x52, NOP_BYTES }; // mov w0, #0
+    static const uint8_t repl[] = { MOV_W0_0_BYTES, NOP_BYTES }; // mov w0, #0
     ck_patcher_find_replace(
         range, "allow unsigned firmware in img4_firmware_evaluate", find, mask,
         sizeof(find), repl, NULL, 8, sizeof(repl));
+}
+
+static void ck_kp_cs_patches(CKPatcherRange *range)
+{
+    // skip code signature checks in vm_fault_enter
+    static const uint8_t find[] = {
+        0x00, 0x00, 0x18, 0x36, // tbz w?, #3, #?
+        0x00, 0x00, 0x80, 0x52, // mov w?, #0
+    };
+    static const uint8_t mask[] = { 0x00, 0x00, 0xF8, 0xFF,
+                                    0xE0, 0xFF, 0xFF, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
+    static const uint8_t repl[] = { NOP_BYTES };
+    ck_patcher_find_replace(range, "bypass code signature checks", find, mask,
+                            sizeof(find), repl, NULL, 0, sizeof(repl));
+    static const uint8_t find_alt[] = {
+        0x00, 0x00, 0x18, 0x36, // tbz w?, #3, #?
+        0x10, 0x02, 0x17, 0xAA, // mov x?, x?
+        0x00, 0x00, 0x80, 0x52, // mov w?, #0
+    };
+    static const uint8_t mask_alt[] = { 0x00, 0x00, 0xF8, 0xFF, 0x10, 0xFE,
+                                        0xFF, 0xFF, 0xE0, 0xFF, 0xFF, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find_alt) != sizeof(mask_alt));
+    ck_patcher_find_replace(range, "bypass code signature checks (alt)",
+                            find_alt, mask_alt, sizeof(find_alt), repl, NULL, 0,
+                            sizeof(repl));
+}
+
+static bool ck_kp_pmap_cs_enforce_callback(void *ctx, uint8_t *buffer)
+{
+    uint8_t *pacibsp =
+        ck_patcher_find_prev_insn(buffer, 0x30, PACIBSP, 0xFFFFFFFF, 0);
+    if (pacibsp == NULL) {
+        error_report("%s: failed to find pacibsp", __func__);
+        return false;
+    }
+    stl_le_p(pacibsp, MOV_W0_0);
+    stl_le_p(pacibsp + 4, RET);
+    return true;
+}
+
+static void ck_kp_pmap_cs_enforce_patch(CKPatcherRange *range)
+{
+    static const uint8_t find_pmap_cs_enforce[] = {
+        0xE0, 0x03, 0x00, 0xAA, // mov x0, x?
+        0xE1, 0x03, 0x00, 0xAA, // mov x1, x?
+        0x02, 0x10, 0x80, 0x52, // mov w2, #0x80
+        0x03, 0x10, 0x80, 0x52, // mov w3, #0x80
+        0x04, 0x00, 0x80, 0x52, // mov w4, #0
+        0x00, 0x00, 0x00, 0x94, // bl #?
+    };
+    static const uint8_t mask_pmap_cs_enforce[] = {
+        0xFF, 0xFF, 0xE0, 0xFF, 0xFF, 0xFF, 0xE0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0xFC
+    };
+    QEMU_BUILD_BUG_ON(sizeof(find_pmap_cs_enforce) !=
+                      sizeof(mask_pmap_cs_enforce));
+    ck_patcher_find_callback(range, "bypass pmap_cs_enforce",
+                             find_pmap_cs_enforce, mask_pmap_cs_enforce,
+                             sizeof(find_pmap_cs_enforce),
+                             ck_kp_pmap_cs_enforce_callback);
+    fprintf(stderr, "%s: base=0x%llX size=0x%llX end=0x%llX", __func__,
+            range->addr, range->length, range->addr + range->length);
 }
 
 void ck_patch_kernel(MachoHeader64 *hdr)
@@ -485,7 +556,7 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     g_autofree CKPatcherRange *img4_text;
     g_autofree CKPatcherRange *kernel_text;
     g_autofree CKPatcherRange *kernel_const;
-    g_autofree CKPatcherRange *ppltext_exec;
+    g_autofree CKPatcherRange *kernel_ppltext;
 
     apfs_hdr = ck_kp_find_image_header(hdr, "com.apple.filesystems.apfs");
     apfs_text = ck_kp_find_section_range(apfs_hdr, "__TEXT_EXEC", "__text");
@@ -512,14 +583,17 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     ck_kp_mac_mount_patch(kernel_text);
     ck_kp_kprintf_patch(kernel_text);
     ck_kp_amx_patch(kernel_text);
+    ck_kp_cs_patches(kernel_text);
     kernel_const = ck_kp_get_kernel_section(hdr, "__TEXT", "__const");
     ck_kp_hactivation_patch(kernel_const);
 
-    ppltext_exec = ck_kp_find_section_range(hdr, "__PPLTEXT", "__text");
-    if (ppltext_exec == NULL) {
+    kernel_ppltext = ck_kp_find_section_range(hdr, "__PPLTEXT", "__text");
+    if (kernel_ppltext == NULL) {
         warn_report("Failed to find `__PPLTEXT.__text`.");
+        ck_kp_pmap_cs_enforce_patch(kernel_text);
     } else {
-        ck_kp_tc_patch(ppltext_exec);
-        ck_kp_tc_ios16_patch(ppltext_exec);
+        ck_kp_tc_patch(kernel_ppltext);
+        ck_kp_tc_ios16_patch(kernel_ppltext);
+        ck_kp_pmap_cs_enforce_patch(kernel_ppltext);
     }
 }
