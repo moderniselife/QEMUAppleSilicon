@@ -223,15 +223,15 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
 
     frame = ck_patcher_find_prev_insn(buffer, 10, 0x910003FD, 0xFF8003FF, 0);
     if (frame == NULL) {
-        info_report("%s: Found AMFI (Leaf)", __func__);
+        info_report("%s: found AMFI (Leaf)", __func__);
     } else {
-        info_report("%s: Found AMFI (Routine)", __func__);
+        info_report("%s: found AMFI (Routine)", __func__);
         start = ck_patcher_find_prev_insn(frame, 10, 0xA9A003E0, 0xFFE003E0, 0);
         if (start == NULL) {
             start =
                 ck_patcher_find_prev_insn(frame, 10, 0xD10003FF, 0xFF8003FF, 0);
             if (start == NULL) {
-                error_report("%s: Failed to find AMFI start", __func__);
+                error_report("%s: failed to find AMFI start", __func__);
                 return false;
             }
         }
@@ -259,7 +259,8 @@ static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
         stl_le_p(start + 20, (pac ? RETAB : RET));
         return true;
     default:
-        error_report("Found unexpected AMFI prototype: %d", cdhash_param);
+        error_report("%s: found unexpected AMFI prototype: %d", __func__,
+                     cdhash_param);
         break;
     }
     return false;
@@ -395,7 +396,7 @@ static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
     void *amx_ver_str =
         ck_patcher_find_prev_insn(buffer, 10, 0xB800000A, 0xFEC0001F, 1);
     if (amx_ver_str == NULL) {
-        error_report("%s: Failed to find gAMXVersion store.", __func__);
+        error_report("%s: failed to find gAMXVersion store.", __func__);
         return false;
     }
     stl_le_p(amx_ver_str, NOP);
@@ -419,7 +420,7 @@ static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
     uint8_t find[] = "com.apple.os.update-";
     uint8_t repl[] = "shitcode.os.bullshit";
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(repl));
-    ck_patcher_find_replace(range, "Disable APFS snapshots", find, NULL,
+    ck_patcher_find_replace(range, "disable APFS snapshots", find, NULL,
                             sizeof(find), repl, NULL, 0, sizeof(repl));
 }
 
@@ -437,9 +438,8 @@ static void ck_kp_hactivation_patch(CKPatcherRange *range)
 {
     uint8_t find[] = "\0release";
     uint8_t repl[] = "profile";
-    ck_patcher_find_replace(
-        range, "Enable hactivation (by changing osbuild_config to profile)",
-        find, NULL, sizeof(find), repl, NULL, 1, sizeof(repl));
+    ck_patcher_find_replace(range, "enable hactivation", find, NULL,
+                            sizeof(find), repl, NULL, 1, sizeof(repl));
 }
 
 static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
@@ -454,8 +454,25 @@ static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     uint8_t repl[] = { 0x28, 0x00, 0xA0, 0x52 }; // mov w8, #0x10000
     ck_patcher_find_replace(
-        range, "Use SCOT as TRAC (increase its size to 0x10000)", find, mask,
+        range, "increase SCOT size to 0x10000 to use it as TRAC", find, mask,
         sizeof(find), repl, NULL, 4, sizeof(repl));
+}
+
+static void ck_kp_img4_patches(CKPatcherRange *range)
+{
+    uint8_t find[] = {
+        0xE1, 0x03, 0x00, 0xAA, // mov x1, x?
+        0x00, 0x00, 0x00, 0x94, // bl #?
+        0x1F, 0x04, 0x00, 0x31, // cmn w0, #0x1
+        0x00, 0x00, 0x00, 0x54, // b.eq #?
+    };
+    uint8_t mask[] = { 0xFF, 0xFF, 0xE0, 0xFF, 0x00, 0x00, 0x00, 0xFC,
+                       0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0x00, 0xF8, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
+    uint8_t repl[] = { 0x00, 0x00, 0x80, 0x52, NOP_BYTES }; // mov w0, #0
+    ck_patcher_find_replace(
+        range, "allow unsigned firmware in img4_firmware_evaluate", find, mask,
+        sizeof(find), repl, NULL, 8, sizeof(repl));
 }
 
 void ck_patch_kernel(MachoHeader64 *hdr)
@@ -465,6 +482,7 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     g_autofree CKPatcherRange *apfs_cstring;
     g_autofree CKPatcherRange *amfi_text;
     g_autofree CKPatcherRange *sep_mgr_text;
+    g_autofree CKPatcherRange *img4_text;
     g_autofree CKPatcherRange *kernel_text;
     g_autofree CKPatcherRange *kernel_const;
     g_autofree CKPatcherRange *ppltext_exec;
@@ -485,6 +503,9 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     sep_mgr_text =
         ck_kp_find_image_text(hdr, "com.apple.driver.AppleSEPManager");
     ck_kp_sep_mgr_patches(sep_mgr_text);
+
+    img4_text = ck_kp_find_image_text(hdr, "com.apple.security.AppleImage4");
+    ck_kp_img4_patches(img4_text);
 
     kernel_text = ck_kp_get_kernel_section(hdr, "__TEXT_EXEC", "__text");
     ck_kp_tc_patch(kernel_text);

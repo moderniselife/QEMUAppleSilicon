@@ -163,9 +163,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
         return;
     }
 
-    const uint32_t nop = cpu_to_le32(0xD503201F);
-    const uint32_t ret = cpu_to_le32(0xD65F03C0);
-
 #ifndef ENABLE_SEP
     // Make all AppleSEPKeyStoreUserClient requests do nothing but return
     // success
@@ -173,10 +170,7 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xD65F0FFF);
 #endif
 
-    // Force call to `Img4DecodePerformTrustEvaluationWithCallbacks` return
-    // value check to pass.
-    *(uint32_t *)vtop_slid(0xFFFFFFF00838030C) = cpu_to_le32(0x52800000);
-    *(uint32_t *)vtop_slid(0xFFFFFFF008380310) = nop;
+    const uint32_t ret = cpu_to_le32(0xD65F03C0);
 
     // _ubc_cs_check_validation_bitmap return 0
     *(uint32_t *)vtop_slid(0xFFFFFFF007EBDF40) = cpu_to_le32(0xD2800000);
