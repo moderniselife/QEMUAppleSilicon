@@ -156,19 +156,6 @@ static void t8030_create_s3c_uart(const T8030MachineState *t8030_machine,
 static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
 {
     ck_patch_kernel(hdr);
-
-    if (BUILD_VERSION_MAJOR(build_version) != 14 ||
-        BUILD_VERSION_MINOR(build_version) != 0 ||
-        BUILD_VERSION_PATCH(build_version) != 0) {
-        return;
-    }
-
-#ifndef ENABLE_SEP
-    // Make all AppleSEPKeyStoreUserClient requests do nothing but return
-    // success
-    *(uint32_t *)vtop_slid(0xFFFFFFF008F6F774) = cpu_to_le32(0x52800000);
-    *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xD65F0FFF);
-#endif
 }
 
 static bool t8030_check_panic(T8030MachineState *t8030_machine)

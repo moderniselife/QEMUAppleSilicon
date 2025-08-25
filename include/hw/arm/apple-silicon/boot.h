@@ -18,12 +18,7 @@
 #define HW_ARM_APPLE_SILICON_BOOT_H
 
 // #define ENABLE_BASEBAND
-#define ENABLE_SEP
 #define ENABLE_DATA_ENCRYPTION
-
-#if defined(ENABLE_DATA_ENCRYPTION) && !defined(ENABLE_SEP)
-#error "Data volume encryption cannot be enabled without SEP"
-#endif
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"

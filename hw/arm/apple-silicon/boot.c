@@ -159,12 +159,6 @@ static const char *REM_NAMES[] = {
     "baseband\0$",     "baseband-spmi\0$",
     "baseband-vol\0$",
 #endif
-#ifndef ENABLE_SEP
-    "sep\0$",          "dart-sep\0$",
-    "xart-vol\0$",     "pearl-sep\0$",
-    "isp\0$",          "xART\0$",
-    "Lynx\0$",
-#endif
 };
 
 static const char *REM_DEV_TYPES[] = {
