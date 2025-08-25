@@ -542,8 +542,6 @@ static void ck_kp_pmap_cs_enforce_patch(CKPatcherRange *range)
                              find_pmap_cs_enforce, mask_pmap_cs_enforce,
                              sizeof(find_pmap_cs_enforce),
                              ck_kp_pmap_cs_enforce_callback);
-    fprintf(stderr, "%s: base=0x%llX size=0x%llX end=0x%llX", __func__,
-            range->addr, range->length, range->addr + range->length);
 }
 
 void ck_patch_kernel(MachoHeader64 *hdr)
