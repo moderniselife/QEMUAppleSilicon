@@ -171,10 +171,6 @@ static void t8030_patch_kernel(MachoHeader64 *hdr, uint32_t build_version)
     // success
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F774) = cpu_to_le32(0x52800000);
     *(uint32_t *)vtop_slid(0xFFFFFFF008F6F778) = cpu_to_le32(0xD65F0FFF);
-#else
-    // `AppleSEPManager::_loadChannelObjectEntries`:
-    // use SCOT as TRAC, thus making it bigger: 0x10000 bytes instead of 0x20.
-    *(uint32_t *)vtop_slid(0xFFFFFFF008B58030) = cpu_to_le32(0x52A00028);
 #endif
 
     // Force call to `Img4DecodePerformTrustEvaluationWithCallbacks` return

@@ -17,6 +17,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/kernel_patches.h"
 #include "hw/arm/apple-silicon/patcher.h"
 #include "qemu/bitops.h"
@@ -192,6 +193,7 @@ static void ck_kp_apfs_patches(CKPatcherRange *range)
         0x1F, 0x00, 0xF8, 0xFF, 0xA0, 0x03, 0xFE, 0xFF,
         0x00, 0xFC, 0xFF, 0xFF, 0xA0, 0x03, 0xC0, 0xFF,
     };
+    QEMU_BUILD_BUG_ON(sizeof(find_root_rw) != sizeof(mask_root_rw));
     uint8_t repl_root_rw[] = { 0x00, 0x00, 0x80, 0x52 }; // mov w0, #0
     ck_patcher_find_replace(range, "allow mounting root as r/w", find_root_rw,
                             mask_root_rw, sizeof(find_root_rw), repl_root_rw,
@@ -265,6 +267,7 @@ static void ck_kp_tc_patch(CKPatcherRange *range)
     };
     uint8_t mask[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
                        0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache", find,
                              mask, sizeof(find), ck_kp_tc_callback);
 }
@@ -288,6 +291,7 @@ static void ck_kp_tc_ios16_patch(CKPatcherRange *range)
 {
     uint8_t find[] = { 0xC0, 0xCF, 0x9D, 0xD2 }; // mov w?, 0xEE7E
     uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
                              find, mask, sizeof(find), ck_kp_tc_ios16_callback);
 }
@@ -306,10 +310,11 @@ static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
     return true;
 }
 
-static void ck_kp_amfi_kext_patches(CKPatcherRange *range)
+static void ck_kp_amfi_patches(CKPatcherRange *range)
 {
     uint8_t find[] = { 0x02, 0x00, 0xD0, 0x36 }; // tbz w2, 0x1A, ?
     uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
                              sizeof(find), ck_kp_amfi_sha1);
 }
@@ -371,6 +376,7 @@ static void ck_kp_kprintf_patch(CKPatcherRange *range)
     };
     uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                        0x1F, 0xFC, 0xE0, 0xFF, 0x1F, 0x00, 0x00, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     uint8_t replace[] = { 0xE8, 0x03, 0x1F, 0x2A };
     ck_patcher_find_replace(range, "force enable kprintf", find, mask,
                             sizeof(find), replace, NULL, 8, sizeof(replace));
@@ -396,6 +402,7 @@ static void ck_kp_amx_patch(CKPatcherRange *range)
         0x09, 0x00, 0x00, 0xAA, // orr x9, x?, x?
     };
     uint8_t mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0xFC, 0xE0, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "disable AMX", find, mask, sizeof(find),
                              ck_kp_amx_callback);
 }
@@ -404,6 +411,7 @@ static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
 {
     uint8_t find[] = "com.apple.os.update-";
     uint8_t repl[] = "shitcode.os.bullshit";
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(repl));
     ck_patcher_find_replace(range, "Disable APFS snapshots", find, NULL,
                             sizeof(find), repl, NULL, 0, sizeof(repl));
 }
@@ -427,6 +435,22 @@ static void ck_kp_hactivation_patch(CKPatcherRange *range)
         find, NULL, sizeof(find), repl, NULL, 1, sizeof(repl));
 }
 
+static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
+{
+    uint8_t find[] = {
+        0x00, 0x04, 0x00, 0xF9, // str x?, [x?, #0x8]
+        0x08, 0x04, 0x80, 0x52, // mov w8, #0x20
+        0x08, 0x10, 0x00, 0xB9, // str w8, [x?, #0x10]
+    };
+    uint8_t mask[] = { 0x00, 0xFC, 0xFF, 0xFF, 0xFF, 0xFF,
+                       0xFF, 0xFF, 0x1F, 0xFC, 0xFF, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
+    uint8_t repl[] = { 0x28, 0x00, 0xA0, 0x52 }; // mov w8, #0x10000
+    ck_patcher_find_replace(
+        range, "Use SCOT as TRAC (increase its size to 0x10000)", find, mask,
+        sizeof(find), repl, NULL, 4, sizeof(repl));
+}
+
 void ck_patch_kernel(MachoHeader64 *hdr)
 {
     MachoHeader64 *apfs_hdr;
@@ -434,6 +458,8 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     g_autofree CKPatcherRange *apfs_cstring;
     MachoHeader64 *amfi_hdr;
     g_autofree CKPatcherRange *amfi_text;
+    MachoHeader64 *sep_mgr_hdr;
+    g_autofree CKPatcherRange *sep_mgr_text;
     g_autofree CKPatcherRange *kernel_text;
     g_autofree CKPatcherRange *kernel_const;
     g_autofree CKPatcherRange *ppltext_exec;
@@ -450,7 +476,13 @@ void ck_patch_kernel(MachoHeader64 *hdr)
     amfi_hdr = ck_kp_find_xnu_image_header(
         hdr, "com.apple.driver.AppleMobileFileIntegrity");
     amfi_text = ck_kp_find_section_range(amfi_hdr, "__TEXT_EXEC", "__text");
-    ck_kp_amfi_kext_patches(amfi_text);
+    ck_kp_amfi_patches(amfi_text);
+
+    sep_mgr_hdr =
+        ck_kp_find_xnu_image_header(hdr, "com.apple.driver.AppleSEPManager");
+    sep_mgr_text =
+        ck_kp_find_section_range(sep_mgr_hdr, "__TEXT_EXEC", "__text");
+    ck_kp_sep_mgr_patches(sep_mgr_text);
 
     kernel_text = ck_kp_get_kernel_section(hdr, "__TEXT_EXEC", "__text");
     ck_kp_tc_patch(kernel_text);
