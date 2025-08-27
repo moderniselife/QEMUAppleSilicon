@@ -10,9 +10,11 @@
  */
 
 #include "qemu/osdep.h"
+#include "exec/target_page.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
 
+#include "emulate/aarch64.h"
 #include "system/runstate.h"
 #include "system/hvf.h"
 #include "system/hvf_int.h"
@@ -2034,21 +2036,36 @@ int hvf_vcpu_exec(CPUState *cpu)
             break;
         }
 
-        assert(isv);
-
-        if (iswrite) {
-            val = hvf_get_reg(cpu, srt);
-            address_space_write(cpu->as,
-                                hvf_exit->exception.physical_address,
-                                MEMTXATTRS_UNSPECIFIED, &val, len);
-        } else {
-            address_space_read(cpu->as,
-                               hvf_exit->exception.physical_address,
-                               MEMTXATTRS_UNSPECIFIED, &val, len);
-            if (sse) {
-                val = sextract64(val, 0, len * 8);
+        if (isv) {
+            if (iswrite) {
+                val = hvf_get_reg(cpu, srt);
+                if (address_space_write(
+                        cpu->as, hvf_exit->exception.physical_address,
+                        MEMTXATTRS_UNSPECIFIED, &val, len) != MEMTX_OK) {
+                    fprintf(stderr, "%s: Failed to write MMIO at 0x%llX\n",
+                            __func__, hvf_exit->exception.physical_address);
+                    hvf_raise_exception(cpu, EXCP_DATA_ABORT, syndrome, 1);
+                    break;
+                }
+            } else {
+                if (address_space_read(
+                        cpu->as, hvf_exit->exception.physical_address,
+                        MEMTXATTRS_UNSPECIFIED, &val, len) != MEMTX_OK) {
+                    fprintf(stderr, "%s: Failed to read MMIO at 0x%llX\n",
+                            __func__, hvf_exit->exception.physical_address);
+                    hvf_raise_exception(cpu, EXCP_DATA_ABORT, syndrome, 1);
+                    break;
+                }
+                if (sse) {
+                    val = sextract64(val, 0, len * 8);
+                }
+                hvf_set_reg(cpu, srt, val);
             }
-            hvf_set_reg(cpu, srt, val);
+        } else if (!arm_aarch64_fallback_emu_single(cpu, hvf_get_reg,
+                                                    hvf_set_reg)) {
+            hvf_raise_exception(cpu, EXCP_DATA_ABORT, syndrome, 1);
+            fprintf(stderr, "%s: instruction decoding failed\n", __func__);
+            break;
         }
 
         advance_pc = true;
