@@ -21,12 +21,12 @@
 #define HW_ARM_APPLE_SILICON_PATCHER_H
 
 #include "qemu/osdep.h"
-#include "exec/hwaddr.h"
+#include "exec/vaddr.h"
 
 typedef struct {
-    /// Not guaranteed to be a physical address.
-    hwaddr addr;
-    hwaddr length;
+    /// Physical or virtual address.
+    vaddr addr;
+    vaddr length;
     /// Guaranteed to be an accessible host pointer.
     void *ptr;
     const char *name;
@@ -35,7 +35,7 @@ typedef struct {
 /// Precondition: `insn` must be masked.
 void *ck_patcher_find_next_insn(void *buffer, uint32_t num, uint32_t insn,
                                 uint32_t mask, uint32_t skip);
-/// Precondition: `insn` must be masked.
+/// See `ck_patcher_find_next_insn`.
 void *ck_patcher_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
                                 uint32_t mask, uint32_t skip);
 
@@ -43,14 +43,25 @@ void *ck_patcher_find_prev_insn(void *buffer, uint32_t num, uint32_t insn,
 typedef bool (*CKPatcherCallback)(void *ctx, uint8_t *buffer);
 
 /// Precondition: bytes in `find` must be masked.
+/// If `align` is set to a non-zero value, the searching will be aligned
+/// to its value amount of bytes, otherwise it will align the search by
+/// a single byte.
+void ck_patcher_find_callback_ctx(CKPatcherRange *range, const char *name,
+                                  const uint8_t *find, const uint8_t *mask,
+                                  size_t len, size_t align, void *ctx,
+                                  CKPatcherCallback callback);
+/// See `ck_patcher_find_callback_ctx`.
 void ck_patcher_find_callback(CKPatcherRange *range, const char *name,
                               const uint8_t *find, const uint8_t *mask,
-                              size_t count, CKPatcherCallback callback);
-/// Precondition: bytes in `find` must be masked.
+                              size_t len, size_t align,
+                              CKPatcherCallback callback);
+/// See `ck_patcher_find_callback`.
+/// `replace_off` is the byte offset in the matched pattern
+/// which the replacement will be applied on.
 void ck_patcher_find_replace(CKPatcherRange *range, const char *name,
                              const uint8_t *find, const uint8_t *mask,
-                             size_t count, const uint8_t *replace,
+                             size_t len, size_t align, const uint8_t *replace,
                              const uint8_t *replace_mask, size_t replace_off,
-                             size_t replace_count);
+                             size_t replace_len);
 
 #endif /* HW_ARM_APPLE_SILICON_PATCHER_H */

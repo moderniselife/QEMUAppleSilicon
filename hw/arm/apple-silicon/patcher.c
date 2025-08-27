@@ -20,20 +20,25 @@
 #include "hw/arm/apple-silicon/patcher.h"
 #include "qemu/bswap.h"
 #include "qemu/error-report.h"
-#include <string.h>
 
-static void ck_patcher_find_callback_ctx(CKPatcherRange *range,
-                                         const char *name, const uint8_t *find,
-                                         const uint8_t *mask, size_t count,
-                                         void *ctx, CKPatcherCallback callback)
+void ck_patcher_find_callback_ctx(CKPatcherRange *range, const char *name,
+                                  const uint8_t *find, const uint8_t *mask,
+                                  size_t len, size_t align, void *ctx,
+                                  CKPatcherCallback callback)
 {
     size_t i;
     size_t match_i;
     uint8_t *match;
     bool found;
 
+    if (align == 0) {
+        align = 1;
+    } else {
+        g_assert_cmpuint(len % align, ==, 0);
+    }
+
     if (mask == NULL) {
-        match = memmem(range->ptr, range->length, find, count);
+        match = memmem(range->ptr, range->length, find, len);
         if (match == NULL || !callback(ctx, match)) {
             error_report("`%s` patch did not apply in `%s`!", name,
                          range->name);
@@ -41,14 +46,14 @@ static void ck_patcher_find_callback_ctx(CKPatcherRange *range,
             info_report("`%s` patch applied in `%s`!", name, range->name);
         }
     } else {
-        for (i = 0; i < count; i++) {
+        for (i = 0; i < len; ++i) {
             g_assert_cmphex(find[i] & mask[i], ==, find[i]);
         }
 
-        for (i = 0; i < range->length; ++i) {
+        for (i = 0; i < range->length; i += align) {
             found = true;
             match = range->ptr + i;
-            for (match_i = 0; match_i < count; ++match_i) {
+            for (match_i = 0; match_i < len; ++match_i) {
                 if ((match[match_i] & mask[match_i]) != find[match_i]) {
                     found = false;
                     break;
@@ -65,9 +70,10 @@ static void ck_patcher_find_callback_ctx(CKPatcherRange *range,
 
 void ck_patcher_find_callback(CKPatcherRange *range, const char *name,
                               const uint8_t *find, const uint8_t *mask,
-                              size_t count, CKPatcherCallback callback)
+                              size_t len, size_t align,
+                              CKPatcherCallback callback)
 {
-    ck_patcher_find_callback_ctx(range, name, find, mask, count, NULL,
+    ck_patcher_find_callback_ctx(range, name, find, mask, len, align, NULL,
                                  callback);
 }
 
@@ -75,7 +81,7 @@ typedef struct {
     const uint8_t *replace;
     const uint8_t *mask;
     size_t offset;
-    size_t count;
+    size_t len;
 } CKPatcherFindReplaceContext;
 
 static bool ck_patcher_find_replace_callback(void *ctx, uint8_t *buffer)
@@ -85,9 +91,9 @@ static bool ck_patcher_find_replace_callback(void *ctx, uint8_t *buffer)
 
     repl_ctx = ctx;
     if (repl_ctx->mask == NULL) {
-        memcpy(buffer + repl_ctx->offset, repl_ctx->replace, repl_ctx->count);
+        memcpy(buffer + repl_ctx->offset, repl_ctx->replace, repl_ctx->len);
     } else {
-        for (i = 0; i < repl_ctx->count; ++i) {
+        for (i = 0; i < repl_ctx->len; ++i) {
             buffer[repl_ctx->offset + i] =
                 (buffer[repl_ctx->offset + i] & repl_ctx->mask[i]) |
                 repl_ctx->replace[i];
@@ -98,20 +104,20 @@ static bool ck_patcher_find_replace_callback(void *ctx, uint8_t *buffer)
 
 void ck_patcher_find_replace(CKPatcherRange *range, const char *name,
                              const uint8_t *find, const uint8_t *mask,
-                             size_t count, const uint8_t *replace,
+                             size_t len, size_t align, const uint8_t *replace,
                              const uint8_t *replace_mask, size_t replace_off,
-                             size_t replace_count)
+                             size_t replace_len)
 {
     CKPatcherFindReplaceContext ctx;
 
-    g_assert_cmphex(replace_off + replace_count, <=, count);
+    g_assert_cmphex(replace_off + replace_len, <=, len);
 
     ctx.replace = replace;
     ctx.mask = replace_mask;
     ctx.offset = replace_off;
-    ctx.count = replace_count;
+    ctx.len = replace_len;
 
-    ck_patcher_find_callback_ctx(range, name, find, mask, count, &ctx,
+    ck_patcher_find_callback_ctx(range, name, find, mask, len, align, &ctx,
                                  ck_patcher_find_replace_callback);
 }
 

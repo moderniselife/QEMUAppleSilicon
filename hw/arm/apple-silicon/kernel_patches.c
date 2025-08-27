@@ -189,8 +189,8 @@ static void ck_kp_apfs_patches(CKPatcherRange *range)
     static const uint8_t repl_root_auth[] = { NOP_BYTES, 0x00, 0x00, 0x80,
                                               0x52 }; // mov w0, #0
     ck_patcher_find_replace(range, "bypass root authentication", find_root_auth,
-                            NULL, sizeof(find_root_auth), repl_root_auth, NULL,
-                            0, sizeof(repl_root_auth));
+                            NULL, sizeof(find_root_auth), sizeof(uint32_t),
+                            repl_root_auth, NULL, 0, sizeof(repl_root_auth));
 
     static const uint8_t find_root_rw[] = {
         0x00, 0x00, 0x70, 0x37, // tbnz w0, 0xE, ?
@@ -205,8 +205,9 @@ static void ck_kp_apfs_patches(CKPatcherRange *range)
     QEMU_BUILD_BUG_ON(sizeof(find_root_rw) != sizeof(mask_root_rw));
     static const uint8_t repl_root_rw[] = { MOV_W0_0_BYTES };
     ck_patcher_find_replace(range, "allow mounting root as r/w", find_root_rw,
-                            mask_root_rw, sizeof(find_root_rw), repl_root_rw,
-                            NULL, 0, sizeof(repl_root_rw));
+                            mask_root_rw, sizeof(find_root_rw),
+                            sizeof(uint32_t), repl_root_rw, NULL, 0,
+                            sizeof(repl_root_rw));
 }
 
 static bool ck_kp_tc_callback(void *ctx, uint8_t *buffer)
@@ -279,7 +280,8 @@ static void ck_kp_tc_patch(CKPatcherRange *range)
                                     0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache", find,
-                             mask, sizeof(find), ck_kp_tc_callback);
+                             mask, sizeof(find), sizeof(uint32_t),
+                             ck_kp_tc_callback);
 }
 
 static bool ck_kp_tc_ios16_callback(void *ctx, uint8_t *buffer)
@@ -303,7 +305,8 @@ static void ck_kp_tc_ios16_patch(CKPatcherRange *range)
     static const uint8_t mask[] = { 0xC0, 0xFF, 0xFF, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "AMFI, all binaries in trustcache (iOS 16)",
-                             find, mask, sizeof(find), ck_kp_tc_ios16_callback);
+                             find, mask, sizeof(find), sizeof(uint32_t),
+                             ck_kp_tc_ios16_callback);
 }
 
 static bool ck_kp_amfi_sha1(void *ctx, uint8_t *buffer)
@@ -326,7 +329,7 @@ static void ck_kp_amfi_patches(CKPatcherRange *range)
     static const uint8_t mask[] = { 0x1F, 0x00, 0xF8, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "allow SHA1 signatures in AMFI", find, mask,
-                             sizeof(find), ck_kp_amfi_sha1);
+                             sizeof(find), sizeof(uint32_t), ck_kp_amfi_sha1);
 }
 
 static bool ck_kp_mac_mount_callback(void *ctx, uint8_t *buffer)
@@ -370,12 +373,12 @@ static void ck_kp_mac_mount_patch(CKPatcherRange *range)
                                         0x32 }; // orr w9, wzr, 0x1FFE
     ck_patcher_find_callback(
         range, "allow remounting rootfs, union mounts (old)", find_old, NULL,
-        sizeof(find_old), ck_kp_mac_mount_callback);
+        sizeof(find_old), sizeof(uint32_t), ck_kp_mac_mount_callback);
     static const uint8_t find_new[] = { 0xC9, 0xFF, 0x83,
                                         0x52 }; // movz w9, 0x1FFE
     ck_patcher_find_callback(
         range, "allow remounting rootfs, union mounts (new)", find_new, NULL,
-        sizeof(find_new), ck_kp_mac_mount_callback);
+        sizeof(find_new), sizeof(uint32_t), ck_kp_mac_mount_callback);
 }
 
 static void ck_kp_kprintf_patch(CKPatcherRange *range)
@@ -392,7 +395,8 @@ static void ck_kp_kprintf_patch(CKPatcherRange *range)
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     static const uint8_t replace[] = { 0xE8, 0x03, 0x1F, 0x2A };
     ck_patcher_find_replace(range, "force enable kprintf", find, mask,
-                            sizeof(find), replace, NULL, 8, sizeof(replace));
+                            sizeof(find), sizeof(uint32_t), replace, NULL, 8,
+                            sizeof(replace));
 }
 
 static bool ck_kp_amx_callback(void *ctx, uint8_t *buffer)
@@ -418,7 +422,7 @@ static void ck_kp_amx_patch(CKPatcherRange *range)
                                     0x1F, 0xFC, 0xE0, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     ck_patcher_find_callback(range, "disable AMX", find, mask, sizeof(find),
-                             ck_kp_amx_callback);
+                             sizeof(uint32_t), ck_kp_amx_callback);
 }
 
 static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
@@ -427,7 +431,7 @@ static void ck_kp_apfs_snapshot_patch(CKPatcherRange *range)
     static const uint8_t repl[] = "shitcode.os.bullshit";
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(repl));
     ck_patcher_find_replace(range, "disable APFS snapshots", find, NULL,
-                            sizeof(find), repl, NULL, 0, sizeof(repl));
+                            sizeof(find), 0, repl, NULL, 0, sizeof(repl));
 }
 
 // this will tell launchd this is an internal build,
@@ -445,7 +449,7 @@ static void ck_kp_hactivation_patch(CKPatcherRange *range)
     static const uint8_t find[] = "\0release";
     static const uint8_t repl[] = "profile";
     ck_patcher_find_replace(range, "enable hactivation", find, NULL,
-                            sizeof(find), repl, NULL, 1, sizeof(repl));
+                            sizeof(find), 0, repl, NULL, 1, sizeof(repl));
 }
 
 static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
@@ -462,7 +466,7 @@ static void ck_kp_sep_mgr_patches(CKPatcherRange *range)
                                     0x52 }; // mov w8, #0x10000
     ck_patcher_find_replace(
         range, "increase SCOT size to 0x10000 to use it as TRAC", find, mask,
-        sizeof(find), repl, NULL, 4, sizeof(repl));
+        sizeof(find), sizeof(uint32_t), repl, NULL, 4, sizeof(repl));
 }
 
 static void ck_kp_img4_patches(CKPatcherRange *range)
@@ -480,7 +484,7 @@ static void ck_kp_img4_patches(CKPatcherRange *range)
     static const uint8_t repl[] = { MOV_W0_0_BYTES, NOP_BYTES }; // mov w0, #0
     ck_patcher_find_replace(
         range, "allow unsigned firmware in img4_firmware_evaluate", find, mask,
-        sizeof(find), repl, NULL, 8, sizeof(repl));
+        sizeof(find), sizeof(uint32_t), repl, NULL, 8, sizeof(repl));
 }
 
 static void ck_kp_cs_patches(CKPatcherRange *range)
@@ -495,7 +499,8 @@ static void ck_kp_cs_patches(CKPatcherRange *range)
     QEMU_BUILD_BUG_ON(sizeof(find) != sizeof(mask));
     static const uint8_t repl[] = { NOP_BYTES };
     ck_patcher_find_replace(range, "bypass code signature checks", find, mask,
-                            sizeof(find), repl, NULL, 0, sizeof(repl));
+                            sizeof(find), sizeof(uint32_t), repl, NULL, 0,
+                            sizeof(repl));
     static const uint8_t find_alt[] = {
         0x00, 0x00, 0x18, 0x36, // tbz w?, #3, #?
         0x10, 0x02, 0x17, 0xAA, // mov x?, x?
@@ -505,8 +510,8 @@ static void ck_kp_cs_patches(CKPatcherRange *range)
                                         0xFF, 0xFF, 0xE0, 0xFF, 0xFF, 0xFF };
     QEMU_BUILD_BUG_ON(sizeof(find_alt) != sizeof(mask_alt));
     ck_patcher_find_replace(range, "bypass code signature checks (alt)",
-                            find_alt, mask_alt, sizeof(find_alt), repl, NULL, 0,
-                            sizeof(repl));
+                            find_alt, mask_alt, sizeof(find_alt),
+                            sizeof(uint32_t), repl, NULL, 0, sizeof(repl));
 }
 
 static bool ck_kp_pmap_cs_enforce_callback(void *ctx, uint8_t *buffer)
@@ -540,7 +545,7 @@ static void ck_kp_pmap_cs_enforce_patch(CKPatcherRange *range)
                       sizeof(mask_pmap_cs_enforce));
     ck_patcher_find_callback(range, "bypass pmap_cs_enforce",
                              find_pmap_cs_enforce, mask_pmap_cs_enforce,
-                             sizeof(find_pmap_cs_enforce),
+                             sizeof(find_pmap_cs_enforce), sizeof(uint32_t),
                              ck_kp_pmap_cs_enforce_callback);
 }
 
