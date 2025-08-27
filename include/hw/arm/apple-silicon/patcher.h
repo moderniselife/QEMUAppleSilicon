@@ -47,21 +47,22 @@ typedef bool (*CKPatcherCallback)(void *ctx, uint8_t *buffer);
 /// to its value amount of bytes, otherwise it will align the search by
 /// a single byte.
 void ck_patcher_find_callback_ctx(CKPatcherRange *range, const char *name,
-                                  const uint8_t *find, const uint8_t *mask,
+                                  const uint8_t *pattern, const uint8_t *mask,
                                   size_t len, size_t align, void *ctx,
                                   CKPatcherCallback callback);
 /// See `ck_patcher_find_callback_ctx`.
 void ck_patcher_find_callback(CKPatcherRange *range, const char *name,
-                              const uint8_t *find, const uint8_t *mask,
+                              const uint8_t *pattern, const uint8_t *mask,
                               size_t len, size_t align,
                               CKPatcherCallback callback);
 /// See `ck_patcher_find_callback`.
 /// `replace_off` is the byte offset in the matched pattern
-/// which the replacement will be applied on.
+/// which the `replacement` will be applied on.
 void ck_patcher_find_replace(CKPatcherRange *range, const char *name,
-                             const uint8_t *find, const uint8_t *mask,
-                             size_t len, size_t align, const uint8_t *replace,
-                             const uint8_t *replace_mask, size_t replace_off,
-                             size_t replace_len);
+                             const uint8_t *pattern, const uint8_t *mask,
+                             size_t len, size_t align,
+                             const uint8_t *replacement,
+                             const uint8_t *replacement_mask,
+                             size_t replace_off, size_t replace_len);
 
 #endif /* HW_ARM_APPLE_SILICON_PATCHER_H */
