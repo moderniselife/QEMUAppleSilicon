@@ -306,6 +306,9 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
                 tz1_virt_high);
     AddressSpace *sas =
         cpu_get_address_space(CPU(s8000_machine->cpus[0]), ARMASIdx_S);
+    if (kvm_enabled()) {
+        sas = nsas; // HACK for KVM, but also works for TCG.
+    }
     g_assert_nonnull(sas);
     hwaddr tz1_entry =
         arm_load_macho(s8000_machine->secure_monitor, sas,
@@ -478,17 +481,41 @@ static void pmgr_unk_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
+    S8000MachineState *s8000_machine = S8000_MACHINE(qdev_get_machine());
+    // AppleSEPState *sep;
     hwaddr base = (hwaddr)opaque;
+
+    uint32_t security_epoch = 1; // On IMG4: Security Epoch ; On IMG3: Minimum
+                                 // Epoch, verified on SecureROM s5l8955xsi
+    bool current_prod = true;
+    bool current_secure_mode = true; // T8015 SEPOS Kernel also requires this.
+    uint32_t security_domain = 1;
+    bool raw_prod = true;
+    bool raw_secure_mode = true;
+    uint32_t sep_bit30_current_value = 0;
+    bool fuses_locked = true;
+    uint32_t ret = 0x0;
 
     switch (base + addr) {
     case 0x102BC000: // CFG_FUSE0
-        return (1 << 2);
+    //     // handle SEP DSEC demotion
+    //     if (sep != NULL && sep->pmgr_fuse_changer_bit1_was_set)
+    //         current_secure_mode = 0; // SEP DSEC img4 tag demotion active
+        ret |= (current_prod << 0);
+        ret |= (current_secure_mode << 1);
+        ret |= ((security_domain & 3) << 2);
+        ret |= ((s8000_machine->board_id & 7) << 4);
+        ret |= ((security_epoch & 0x7f) << 9);
+        // ret |= (( & ) << );
+        return ret;
     case 0x102BC200: // CFG_FUSE0_RAW
-        return 0x0;
+        ret |= (raw_prod << 0);
+        ret |= (raw_secure_mode << 1);
+        return ret;
     case 0x102BC080: // ECID_LO
-        return 0x13371337;
+        return s8000_machine->ecid & 0xffffffff; // ECID lower
     case 0x102BC084: // ECID_HI
-        return 0xDEADBEEF;
+        return s8000_machine->ecid >> 32; // ECID upper
     case 0x102E8000: // ????
         return 0x4;
     case 0x102BC104: // ???? bit 24 => is fresh boot?
@@ -1037,6 +1064,8 @@ static void s8000_create_usb(S8000MachineState *s8000_machine)
                         s8000_machine->soc_base_pa +
                             ((uint64_t *)prop->data)[0]);
     }
+    // no-pmu is needed for T8015, and is also necessary for S8000.
+    dtb_set_prop_u32(complex, "no-pmu", 1);
 
     sysbus_realize_and_unref(SYS_BUS_DEVICE(otg), &error_fatal);
 
