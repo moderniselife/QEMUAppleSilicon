@@ -67,6 +67,33 @@
 #include "system/runstate.h"
 #include "system/system.h"
 
+#define PROP_STR_GETTER_SETTER(_name)                             \
+    static char *t8030_get_##_name(Object *obj, Error **errp)     \
+    {                                                             \
+        return g_strdup(T8030_MACHINE(obj)->_name);               \
+    }                                                             \
+                                                                  \
+    static void t8030_set_##_name(Object *obj, const char *value, \
+                                  Error **errp)                   \
+    {                                                             \
+        T8030MachineState *t8030_machine;                         \
+                                                                  \
+        t8030_machine = T8030_MACHINE(obj);                       \
+        g_free(t8030_machine->_name);                             \
+        t8030_machine->_name = g_strdup(value);                   \
+    }
+
+#define PROP_GETTER_SETTER(_type, _name)                                  \
+    static void t8030_set_##_name(Object *obj, _type value, Error **errp) \
+    {                                                                     \
+        T8030_MACHINE(obj)->_name = value;                                \
+    }                                                                     \
+                                                                          \
+    static _type t8030_get_##_name(Object *obj, Error **errp)             \
+    {                                                                     \
+        return T8030_MACHINE(obj)->_name;                                 \
+    }
+
 #define SROM_BASE (0x100000000)
 #define SROM_SIZE (512 * KiB)
 
@@ -2775,22 +2802,6 @@ static ram_addr_t t8030_machine_fixup_ram_size(ram_addr_t size)
     return ROUND_UP_16K(size);
 }
 
-#define PROP_STR_GETTER_SETTER(_name)                             \
-    static char *t8030_get_##_name(Object *obj, Error **errp)     \
-    {                                                             \
-        return g_strdup(T8030_MACHINE(obj)->_name);               \
-    }                                                             \
-                                                                  \
-    static void t8030_set_##_name(Object *obj, const char *value, \
-                                  Error **errp)                   \
-    {                                                             \
-        T8030MachineState *t8030_machine;                         \
-                                                                  \
-        t8030_machine = T8030_MACHINE(obj);                       \
-        g_free(t8030_machine->_name);                             \
-        t8030_machine->_name = g_strdup(value);                   \
-    }
-
 PROP_STR_GETTER_SETTER(trustcache_filename);
 PROP_STR_GETTER_SETTER(ticket_filename);
 PROP_STR_GETTER_SETTER(sep_rom_filename);
@@ -2849,36 +2860,9 @@ static void t8030_set_ecid(Object *obj, Visitor *v, const char *name,
     }
 }
 
-static void t8030_set_kaslr_off(Object *obj, bool value, Error **errp)
-{
-    T8030_MACHINE(obj)->kaslr_off = value;
-}
-
-static bool t8030_get_kaslr_off(Object *obj, Error **errp)
-{
-    return T8030_MACHINE(obj)->kaslr_off;
-}
-
-static void t8030_set_force_dfu(Object *obj, bool value, Error **errp)
-{
-    T8030_MACHINE(obj)->force_dfu = value;
-}
-
-static bool t8030_get_force_dfu(Object *obj, Error **errp)
-{
-    return T8030_MACHINE(obj)->force_dfu;
-}
-
-static void t8030_set_usb_conn_type(Object *obj, int value, Error **errp)
-{
-    T8030_MACHINE(obj)->usb_conn_type = value;
-}
-
-static int t8030_get_usb_conn_type(Object *obj, Error **errp)
-{
-    return T8030_MACHINE(obj)->usb_conn_type;
-}
-
+PROP_GETTER_SETTER(bool, kaslr_off);
+PROP_GETTER_SETTER(bool, force_dfu);
+PROP_GETTER_SETTER(int, usb_conn_type);
 PROP_STR_GETTER_SETTER(usb_conn_addr);
 
 static void t8030_get_usb_conn_port(Object *obj, Visitor *v, const char *name,
