@@ -661,8 +661,8 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
 
     if (t8030_machine->ticket_filename) {
         if (!g_file_get_contents(t8030_machine->ticket_filename,
-                                 &info->ticket_data,
-                                 (gsize *)&info->ticket_length, NULL)) {
+                                 &info->ticket_data, &info->ticket_length,
+                                 NULL)) {
             error_report("`%s` file read failed.",
                          t8030_machine->ticket_filename);
         }
