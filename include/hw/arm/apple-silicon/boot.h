@@ -296,7 +296,7 @@ typedef struct {
     uint8_t nvram_data[XNU_MAX_NVRAM_SIZE];
     uint32_t nvram_size;
     char *ticket_data;
-    uint64_t ticket_length;
+    gsize ticket_length;
     uint8_t boot_nonce_hash[XNU_BNCH_SIZE];
 } AppleBootInfo;
 
