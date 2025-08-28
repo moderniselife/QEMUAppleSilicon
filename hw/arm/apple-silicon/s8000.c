@@ -53,6 +53,33 @@
 #include "system/system.h"
 #include "target/arm/arm-powerctl.h"
 
+#define PROP_STR_GETTER_SETTER(_name)                             \
+    static char *s8000_get_##_name(Object *obj, Error **errp)     \
+    {                                                             \
+        return g_strdup(S8000_MACHINE(obj)->_name);               \
+    }                                                             \
+                                                                  \
+    static void s8000_set_##_name(Object *obj, const char *value, \
+                                  Error **errp)                   \
+    {                                                             \
+        S8000MachineState *s8000_machine;                         \
+                                                                  \
+        s8000_machine = S8000_MACHINE(obj);                       \
+        g_free(s8000_machine->_name);                             \
+        s8000_machine->_name = g_strdup(value);                   \
+    }
+
+#define PROP_GETTER_SETTER(_type, _name)                                  \
+    static void s8000_set_##_name(Object *obj, _type value, Error **errp) \
+    {                                                                     \
+        S8000_MACHINE(obj)->_name = value;                                \
+    }                                                                     \
+                                                                          \
+    static _type s8000_get_##_name(Object *obj, Error **errp)             \
+    {                                                                     \
+        return S8000_MACHINE(obj)->_name;                                 \
+    }
+
 #define S8000_SPI0_IRQ 188
 
 #define S8000_GPIO_HOLD_KEY 97
@@ -76,7 +103,7 @@
 #define S8000_NVME_SART_BASE (S8000_DRAM_BASE + 0x7F400000ull)
 #define S8000_NVME_SART_SIZE 0xc00000ull
 
-// regions 0x1/0x7/0xa are in between, each with a size of 0x4000 bytes.
+// regions 0x1/0x7/0xa are in-between, each with a size of 0x4000 bytes.
 
 // Carveout region 0xC
 #define S8000_PANIC_SIZE 0x80000ull
@@ -1506,98 +1533,10 @@ static void s8000_machine_init(MachineState *machine)
     qemu_add_machine_init_done_notifier(&s8000_machine->init_done_notifier);
 }
 
-static void s8000_set_kaslr_off(Object *obj, bool value, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    s8000_machine->kaslr_off = value;
-}
-
-static bool s8000_get_kaslr_off(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return s8000_machine->kaslr_off;
-}
-
 static ram_addr_t s8000_machine_fixup_ram_size(ram_addr_t size)
 {
     g_assert_cmpuint(size, ==, S8000_DRAM_SIZE);
     return size;
-}
-
-static void s8000_set_trustcache_filename(Object *obj, const char *value,
-                                          Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    g_free(s8000_machine->trustcache_filename);
-    s8000_machine->trustcache_filename = g_strdup(value);
-}
-
-static char *s8000_get_trustcache_filename(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return g_strdup(s8000_machine->trustcache_filename);
-}
-
-static void s8000_set_ticket_filename(Object *obj, const char *value,
-                                      Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    g_free(s8000_machine->ticket_filename);
-    s8000_machine->ticket_filename = g_strdup(value);
-}
-
-static char *s8000_get_ticket_filename(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return g_strdup(s8000_machine->ticket_filename);
-}
-
-static void s8000_set_seprom_filename(Object *obj, const char *value,
-                                      Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    g_free(s8000_machine->seprom_filename);
-    s8000_machine->seprom_filename = g_strdup(value);
-}
-
-static char *s8000_get_seprom_filename(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return g_strdup(s8000_machine->seprom_filename);
-}
-
-static void s8000_set_sepfw_filename(Object *obj, const char *value,
-                                     Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    g_free(s8000_machine->sep_fw_filename);
-    s8000_machine->sep_fw_filename = g_strdup(value);
-}
-
-static char *s8000_get_sepfw_filename(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return g_strdup(s8000_machine->sep_fw_filename);
 }
 
 static void s8000_set_boot_mode(Object *obj, const char *value, Error **errp)
@@ -1641,44 +1580,28 @@ static char *s8000_get_boot_mode(Object *obj, Error **errp)
 static void s8000_get_ecid(Object *obj, Visitor *v, const char *name,
                            void *opaque, Error **errp)
 {
-    S8000MachineState *s8000_machine;
-    int64_t value;
+    uint64_t value;
 
-    s8000_machine = S8000_MACHINE(obj);
-    value = s8000_machine->ecid;
-    visit_type_int(v, name, &value, errp);
+    value = S8000_MACHINE(obj)->ecid;
+    visit_type_uint64(v, name, &value, errp);
 }
 
 static void s8000_set_ecid(Object *obj, Visitor *v, const char *name,
                            void *opaque, Error **errp)
 {
-    S8000MachineState *s8000_machine;
-    int64_t value;
+    uint64_t value;
 
-    s8000_machine = S8000_MACHINE(obj);
-
-    if (!visit_type_int(v, name, &value, errp)) {
-        return;
+    if (visit_type_uint64(v, name, &value, errp)) {
+        S8000_MACHINE(obj)->ecid = value;
     }
-
-    s8000_machine->ecid = value;
 }
 
-static void s8000_set_force_dfu(Object *obj, bool value, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    s8000_machine->force_dfu = value;
-}
-
-static bool s8000_get_force_dfu(Object *obj, Error **errp)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = S8000_MACHINE(obj);
-    return s8000_machine->force_dfu;
-}
+PROP_STR_GETTER_SETTER(trustcache_filename);
+PROP_STR_GETTER_SETTER(ticket_filename);
+PROP_STR_GETTER_SETTER(sep_rom_filename);
+PROP_STR_GETTER_SETTER(sep_fw_filename);
+PROP_GETTER_SETTER(bool, kaslr_off);
+PROP_GETTER_SETTER(bool, force_dfu);
 
 static void s8000_machine_class_init(ObjectClass *klass, const void *data)
 {
@@ -1707,13 +1630,14 @@ static void s8000_machine_class_init(ObjectClass *klass, const void *data)
                                   s8000_set_ticket_filename);
     object_class_property_set_description(klass, "ticket",
                                           "APTicket to be loaded");
-    object_class_property_add_str(klass, "seprom", s8000_get_seprom_filename,
-                                  s8000_set_seprom_filename);
-    object_class_property_set_description(klass, "seprom",
+    object_class_property_add_str(klass, "sep-rom", s8000_get_sep_rom_filename,
+                                  s8000_set_sep_rom_filename);
+    object_class_property_set_description(klass, "sep-rom",
                                           "SEPROM to be loaded");
-    object_class_property_add_str(klass, "sepfw", s8000_get_sepfw_filename,
-                                  s8000_set_sepfw_filename);
-    object_class_property_set_description(klass, "sepfw", "SEPFW to be loaded");
+    object_class_property_add_str(klass, "sep-fw", s8000_get_sep_fw_filename,
+                                  s8000_set_sep_fw_filename);
+    object_class_property_set_description(klass, "sep-fw",
+                                          "SEPFW to be loaded");
     object_class_property_add_str(klass, "boot-mode", s8000_get_boot_mode,
                                   s8000_set_boot_mode);
     object_class_property_set_description(klass, "boot-mode",
