@@ -30,6 +30,7 @@
 #include "hw/arm/exynos4210.h"
 #include "hw/block/apple-silicon/nvme_mmu.h"
 #include "hw/display/apple_displaypipe_v2.h"
+// #include "hw/dma/apple_sio.h"
 #include "hw/gpio/apple_gpio.h"
 #include "hw/i2c/apple_i2c.h"
 #include "hw/intc/apple_aic.h"
@@ -1003,13 +1004,16 @@ static void s8000_create_spi0(S8000MachineState *s8000_machine)
 {
     DeviceState *spi = NULL;
     DeviceState *gpio = NULL;
+    // Object *sio;
     const char *name = "spi0";
 
     spi = qdev_new(TYPE_APPLE_SPI);
     g_assert_nonnull(spi);
     DEVICE(spi)->id = g_strdup(name);
-
     object_property_add_child(OBJECT(s8000_machine), name, OBJECT(spi));
+
+    // sio = object_property_get_link(OBJECT(s8000_machine), "sio", &error_fatal);
+    // g_assert_nonnull(object_property_add_const_link(OBJECT(spi), "sio", sio));
     sysbus_realize_and_unref(SYS_BUS_DEVICE(spi), &error_fatal);
 
     sysbus_mmio_map(SYS_BUS_DEVICE(spi), 0,
@@ -1021,38 +1025,61 @@ static void s8000_create_spi0(S8000MachineState *s8000_machine)
     // The second sysbus IRQ is the cs line
     gpio = DEVICE(
         object_property_get_link(OBJECT(s8000_machine), "gpio", &error_fatal));
+    g_assert_nonnull(gpio);
     qdev_connect_gpio_out(gpio, S8000_GPIO_SPI0_CS,
                           qdev_get_gpio_in_named(spi, SSI_GPIO_CS, 0));
 }
 
-static void s8000_create_spi(S8000MachineState *s8000_machine, const char *name)
+static void s8000_create_spi(S8000MachineState *s8000_machine, uint32_t port)
 {
     SysBusDevice *spi = NULL;
+    DeviceState *gpio = NULL;
     DTBProp *prop;
     uint64_t *reg;
     uint32_t *ints;
     DTBNode *child = dtb_get_node(s8000_machine->device_tree, "arm-io");
+    // Object *sio;
+    char name[32] = { 0 };
+    hwaddr base;
+    uint32_t irq;
+    uint32_t cs_pin;
 
+    snprintf(name, sizeof(name), "spi%d", port);
     child = dtb_get_node(child, name);
     g_assert_nonnull(child);
+
     spi = apple_spi_create(child);
     g_assert_nonnull(spi);
     object_property_add_child(OBJECT(s8000_machine), name, OBJECT(spi));
+
+    // sio = object_property_get_link(OBJECT(s8000_machine), "sio", &error_fatal);
+    // g_assert_nonnull(object_property_add_const_link(OBJECT(spi), "sio", sio));
     sysbus_realize_and_unref(SYS_BUS_DEVICE(spi), &error_fatal);
 
     prop = dtb_find_prop(child, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
-    sysbus_mmio_map(SYS_BUS_DEVICE(spi), 0,
-                    s8000_machine->soc_base_pa + reg[0]);
+    base = s8000_machine->soc_base_pa + reg[0];
+    sysbus_mmio_map(spi, 0, base);
+
     prop = dtb_find_prop(child, "interrupts");
     g_assert_nonnull(prop);
+    ints = (uint32_t *)prop->data;
+    irq = ints[0];
 
     // The second sysbus IRQ is the cs line
-    // TODO: Connect this to gpio over spi_cs0?
-    ints = (uint32_t *)prop->data;
     sysbus_connect_irq(SYS_BUS_DEVICE(spi), 0,
-                       qdev_get_gpio_in(DEVICE(s8000_machine->aic), ints[0]));
+                       qdev_get_gpio_in(DEVICE(s8000_machine->aic), irq));
+
+    prop = dtb_find_prop(child, "function-spi_cs0");
+    g_assert_nonnull(prop);
+    ints = (uint32_t *)prop->data;
+    cs_pin = ints[2];
+    gpio = DEVICE(
+        object_property_get_link(OBJECT(s8000_machine), "gpio", &error_fatal));
+    g_assert_nonnull(gpio);
+    qdev_connect_gpio_out(gpio, cs_pin,
+                          qdev_get_gpio_in_named(DEVICE(spi), SSI_GPIO_CS, 0));
 }
 
 static void s8000_create_usb(S8000MachineState *s8000_machine)
@@ -1517,10 +1544,11 @@ static void s8000_machine_init(MachineState *machine)
     s8000_create_usb(s8000_machine);
     s8000_create_wdt(s8000_machine);
     s8000_create_aes(s8000_machine);
+    // s8000_create_sio(s8000_machine);
     s8000_create_spi0(s8000_machine);
-    s8000_create_spi(s8000_machine, "spi1");
-    s8000_create_spi(s8000_machine, "spi2");
-    s8000_create_spi(s8000_machine, "spi3");
+    s8000_create_spi(s8000_machine, 1);
+    s8000_create_spi(s8000_machine, 2);
+    s8000_create_spi(s8000_machine, 3);
     s8000_create_sep(s8000_machine);
     s8000_create_pmu(s8000_machine);
     s8000_create_pcie(s8000_machine);

@@ -105,6 +105,10 @@
 #define SEPROM_BASE (0x240000000)
 #define SEPROM_SIZE (8 * MiB)
 
+#define SPI0_IRQ (444)
+#define GPIO_SPI0_CS (204)
+#define SPI0_BASE (0x35100000)
+
 #define GPIO_FORCE_DFU (161)
 
 #define DISPLAY_SIZE (68 * MiB)
@@ -1477,6 +1481,35 @@ static void t8030_create_i2c(T8030MachineState *t8030_machine, const char *name)
     sysbus_realize_and_unref(i2c, &error_fatal);
 }
 
+static void t8030_create_spi0(T8030MachineState *t8030_machine)
+{
+    DeviceState *spi = NULL;
+    DeviceState *gpio = NULL;
+    Object *sio;
+    const char *name = "spi0";
+
+    spi = qdev_new(TYPE_APPLE_SPI);
+    g_assert_nonnull(spi);
+    DEVICE(spi)->id = g_strdup(name);
+    object_property_add_child(OBJECT(t8030_machine), name, OBJECT(spi));
+
+    sio = object_property_get_link(OBJECT(t8030_machine), "sio", &error_fatal);
+    g_assert_nonnull(object_property_add_const_link(OBJECT(spi), "sio", sio));
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(spi), &error_fatal);
+
+    sysbus_mmio_map(SYS_BUS_DEVICE(spi), 0,
+                    t8030_machine->soc_base_pa + SPI0_BASE);
+
+    sysbus_connect_irq(SYS_BUS_DEVICE(spi), 0,
+                       qdev_get_gpio_in(DEVICE(t8030_machine->aic), SPI0_IRQ));
+    // The second sysbus IRQ is the cs line
+    gpio = DEVICE(
+        object_property_get_link(OBJECT(t8030_machine), "gpio", &error_fatal));
+    g_assert_nonnull(gpio);
+    qdev_connect_gpio_out(gpio, GPIO_SPI0_CS,
+                          qdev_get_gpio_in_named(spi, SSI_GPIO_CS, 0));
+}
+
 static void t8030_create_spi(T8030MachineState *t8030_machine, uint32_t port)
 {
     SysBusDevice *spi = NULL;
@@ -2767,6 +2800,7 @@ static void t8030_machine_init(MachineState *machine)
     t8030_create_baseband(t8030_machine);
 #endif
     t8030_create_sio(t8030_machine);
+    t8030_create_spi0(t8030_machine);
     t8030_create_spi(t8030_machine, 1);
     t8030_create_spi(t8030_machine, 3);
 
