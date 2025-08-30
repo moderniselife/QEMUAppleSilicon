@@ -54,6 +54,22 @@
 #include "system/system.h"
 #include "target/arm/arm-powerctl.h"
 
+#define PROP_VISIT_GETTER_SETTER(_type, _name)                               \
+    static void s8000_get_##_name(Object *obj, Visitor *v, const char *name, \
+                                  void *opaque, Error **errp)                \
+    {                                                                        \
+        _type##_t value;                                                     \
+                                                                             \
+        value = S8000_MACHINE(obj)->_name;                                   \
+        visit_type_##_type(v, name, &value, errp);                           \
+    }                                                                        \
+                                                                             \
+    static void s8000_set_##_name(Object *obj, Visitor *v, const char *name, \
+                                  void *opaque, Error **errp)                \
+    {                                                                        \
+        visit_type_##_type(v, name, &S8000_MACHINE(obj)->_name, errp);       \
+    }
+
 #define PROP_STR_GETTER_SETTER(_name)                             \
     static char *s8000_get_##_name(Object *obj, Error **errp)     \
     {                                                             \
@@ -81,55 +97,53 @@
         return S8000_MACHINE(obj)->_name;                                 \
     }
 
-#define S8000_SPI0_IRQ 188
+#define SPI0_IRQ 188
+#define GPIO_SPI0_CS 106
+#define GPIO_FORCE_DFU 123
 
-#define S8000_GPIO_HOLD_KEY 97
-#define S8000_GPIO_MENU_KEY 96
-#define S8000_GPIO_SPI0_CS 106
-#define S8000_GPIO_FORCE_DFU 123
-#define S8000_GPIO_DFU_STATUS 136
+#define SPI0_BASE (0xA080000ull)
 
-#define S8000_DRAM_BASE 0x800000000ull
-#define S8000_DRAM_SIZE (2 * GiB)
+#define SROM_BASE (0x100000000)
+#define SROM_SIZE (512 * KiB)
 
-#define S8000_SPI0_BASE 0xA080000ull
+#define DRAM_BASE (0x800000000ull)
+#define DRAM_SIZE (2 * GiB)
 
-#define S8000_SRAM_BASE 0x180000000ull
-#define S8000_SRAM_SIZE 0x400000ull
+#define SRAM_BASE (0x180000000ull)
+#define SRAM_SIZE (0x400000ull)
 
-#define S8000_SEPROM_BASE 0x20D000000ull
-#define S8000_SEPROM_SIZE 0x1000000ull
+#define SEPROM_BASE (0x20D000000ull)
+#define SEPROM_SIZE (0x1000000ull)
 
 // Carveout region 0x2 ; this is the first region
-#define S8000_NVME_SART_BASE (S8000_DRAM_BASE + 0x7F400000ull)
-#define S8000_NVME_SART_SIZE 0xc00000ull
+#define NVME_SART_BASE (DRAM_BASE + 0x7F400000ull)
+#define NVME_SART_SIZE (0xC00000ull)
 
 // regions 0x1/0x7/0xa are in-between, each with a size of 0x4000 bytes.
 
 // Carveout region 0xC
-#define S8000_PANIC_SIZE 0x80000ull
-#define S8000_PANIC_BASE (S8000_NVME_SART_BASE - S8000_PANIC_SIZE - 0xc000ull)
+#define PANIC_SIZE (0x80000ull)
+#define PANIC_BASE (NVME_SART_BASE - PANIC_SIZE - 0xC000ull)
 
 // Carveout region 0x50
-#define S8000_REGION_50_SIZE 0x18000ull
-#define S8000_REGION_50_BASE (S8000_PANIC_BASE - S8000_REGION_50_SIZE)
+#define REGION_50_SIZE (0x18000ull)
+#define REGION_50_BASE (PANIC_BASE - REGION_50_SIZE)
 
 // Carveout region 0xE
-#define S8000_DISPLAY_SIZE 0x854000ull
-#define S8000_DISPLAY_BASE (S8000_REGION_50_BASE - S8000_DISPLAY_SIZE)
+#define DISPLAY_SIZE (0x854000ull)
+#define DISPLAY_BASE (REGION_50_BASE - DISPLAY_SIZE)
 
 // Carveout region 0x4
-#define S8000_TZ0_SIZE 0x1E00000ull
-#define S8000_TZ0_BASE (S8000_DISPLAY_BASE - S8000_TZ0_SIZE)
+#define TZ0_SIZE (0x1E00000ull)
+#define TZ0_BASE (DISPLAY_BASE - TZ0_SIZE)
 
 // Carveout region 0x6
-#define S8000_TZ1_SIZE 0x80000ull
-#define S8000_TZ1_BASE (S8000_TZ0_BASE - S8000_TZ1_SIZE)
+#define TZ1_SIZE (0x80000ull)
+#define TZ1_BASE (TZ0_BASE - TZ1_SIZE)
 
 // Carveout region 0x18
-#define S8000_KERNEL_REGION_BASE S8000_DRAM_BASE
-#define S8000_KERNEL_REGION_SIZE \
-    ((S8000_TZ1_BASE + ~S8000_KERNEL_REGION_BASE + 0x4000) & -0x4000)
+#define KERNEL_REGION_BASE DRAM_BASE
+#define KERNEL_REGION_SIZE ((TZ1_BASE + ~KERNEL_REGION_BASE + 0x4000) & -0x4000)
 
 static void s8000_start_cpus(MachineState *machine, uint64_t cpu_mask)
 {
@@ -265,7 +279,7 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
 
     get_kaslr_slides(s8000_machine, &g_phys_slide, &g_virt_slide);
 
-    g_phys_base = phys_ptr = S8000_KERNEL_REGION_BASE;
+    g_phys_base = phys_ptr = KERNEL_REGION_BASE;
     phys_ptr += g_phys_slide;
     g_virt_base += g_virt_slide - g_phys_slide;
 
@@ -321,8 +335,8 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
 
     info_report("Boot args: [%s]", cmdline);
     macho_setup_bootargs(nsas, sysmem, info->kern_boot_args_addr, g_virt_base,
-                         g_phys_base, S8000_KERNEL_REGION_SIZE,
-                         top_of_kernel_data_pa, dtb_va, info->device_tree_size,
+                         g_phys_base, KERNEL_REGION_SIZE, top_of_kernel_data_pa,
+                         dtb_va, info->device_tree_size,
                          &s8000_machine->video_args, cmdline);
     g_virt_base = virt_low;
 
@@ -340,18 +354,17 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
     g_assert_nonnull(sas);
     hwaddr tz1_entry =
         arm_load_macho(s8000_machine->secure_monitor, sas,
-                       s8000_machine->sys_mem, NULL, S8000_TZ1_BASE, 0);
+                       s8000_machine->sys_mem, NULL, TZ1_BASE, 0);
     info_report("TrustZone 1 entry: 0x" HWADDR_FMT_plx, tz1_entry);
     hwaddr tz1_boot_args_pa =
-        S8000_TZ1_BASE + (S8000_TZ1_SIZE - sizeof(AppleMonitorBootArgs));
+        TZ1_BASE + (TZ1_SIZE - sizeof(AppleMonitorBootArgs));
     info_report("TrustZone 1 boot args address: 0x" HWADDR_FMT_plx,
                 tz1_boot_args_pa);
-    apple_monitor_setup_boot_args(sas, s8000_machine->sys_mem, tz1_boot_args_pa,
-                                  tz1_virt_low, S8000_TZ1_BASE, S8000_TZ1_SIZE,
-                                  s8000_machine->boot_info.kern_boot_args_addr,
-                                  s8000_machine->boot_info.kern_entry,
-                                  g_phys_base, g_phys_slide, g_virt_slide,
-                                  info->kern_text_off);
+    apple_monitor_setup_boot_args(
+        sas, s8000_machine->sys_mem, tz1_boot_args_pa, tz1_virt_low, TZ1_BASE,
+        TZ1_SIZE, s8000_machine->boot_info.kern_boot_args_addr,
+        s8000_machine->boot_info.kern_entry, g_phys_base, g_phys_slide,
+        g_virt_slide, info->kern_text_off);
     s8000_machine->boot_info.tz1_entry = tz1_entry;
     s8000_machine->boot_info.tz1_boot_args_pa = tz1_boot_args_pa;
 }
@@ -372,8 +385,8 @@ static void s8000_memory_setup(MachineState *machine)
         return;
     }
 
-    info->dram_base = S8000_DRAM_BASE;
-    info->dram_size = S8000_DRAM_SIZE;
+    info->dram_base = DRAM_BASE;
+    info->dram_size = DRAM_SIZE;
 
     nvram =
         APPLE_NVRAM(object_resolve_path_at(NULL, "/machine/peripheral/nvram"));
@@ -415,18 +428,17 @@ static void s8000_memory_setup(MachineState *machine)
     if (info->nvram_size > XNU_MAX_NVRAM_SIZE) {
         info->nvram_size = XNU_MAX_NVRAM_SIZE;
     }
+
     if (apple_nvram_serialize(nvram, info->nvram_data,
                               sizeof(info->nvram_data)) < 0) {
         error_report("Failed to read NVRAM");
     }
 
-    if (s8000_machine->ticket_filename) {
-        if (!g_file_get_contents(s8000_machine->ticket_filename,
-                                 &info->ticket_data,
-                                 (gsize *)&info->ticket_length, NULL)) {
-            error_report("Failed to read ticket from file %s",
-                         s8000_machine->ticket_filename);
-        }
+    if (s8000_machine->securerom_filename != NULL) {
+        address_space_rw(&address_space_memory, SROM_BASE,
+                         MEMTXATTRS_UNSPECIFIED, s8000_machine->securerom,
+                         s8000_machine->securerom_size, 1);
+        return;
     }
 
     DTBNode *chosen = dtb_get_node(s8000_machine->device_tree, "chosen");
@@ -453,8 +465,8 @@ static void s8000_memory_setup(MachineState *machine)
     DTBNode *pram = dtb_get_node(s8000_machine->device_tree, "pram");
     if (pram) {
         uint64_t panic_reg[2] = { 0 };
-        uint64_t panic_base = S8000_PANIC_BASE;
-        uint64_t panic_size = S8000_PANIC_SIZE;
+        uint64_t panic_base = PANIC_BASE;
+        uint64_t panic_size = PANIC_SIZE;
 
         panic_reg[0] = panic_base;
         panic_reg[1] = panic_size;
@@ -468,8 +480,8 @@ static void s8000_memory_setup(MachineState *machine)
     DTBNode *vram = dtb_get_node(s8000_machine->device_tree, "vram");
     if (vram) {
         uint64_t vram_reg[2] = { 0 };
-        uint64_t vram_base = S8000_DISPLAY_BASE;
-        uint64_t vram_size = S8000_DISPLAY_SIZE;
+        uint64_t vram_base = DISPLAY_BASE;
+        uint64_t vram_size = DISPLAY_SIZE;
         vram_reg[0] = vram_base;
         vram_reg[1] = vram_size;
         dtb_set_prop(vram, "reg", sizeof(vram_reg), &vram_reg);
@@ -526,9 +538,9 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
 
     switch (base + addr) {
     case 0x102BC000: // CFG_FUSE0
-    //     // handle SEP DSEC demotion
-    //     if (sep != NULL && sep->pmgr_fuse_changer_bit1_was_set)
-    //         current_secure_mode = 0; // SEP DSEC img4 tag demotion active
+        //     // handle SEP DSEC demotion
+        //     if (sep != NULL && sep->pmgr_fuse_changer_bit1_was_set)
+        //         current_secure_mode = 0; // SEP DSEC img4 tag demotion active
         ret |= (current_prod << 0);
         ret |= (current_secure_mode << 1);
         ret |= ((security_domain & 3) << 2);
@@ -868,8 +880,8 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
     // might also work without the sart regions?
 
     uint64_t sart_region[2];
-    sart_region[0] = S8000_NVME_SART_BASE;
-    sart_region[1] = S8000_NVME_SART_SIZE;
+    sart_region[0] = NVME_SART_BASE;
+    sart_region[1] = NVME_SART_SIZE;
     dtb_set_prop(child, "sart-region", sizeof(sart_region), &sart_region);
 
     uint32_t sart_virtual_base;
@@ -879,7 +891,7 @@ static void s8000_create_nvme(S8000MachineState *s8000_machine)
 
     uint64_t nvme_scratch_virt_region[2];
     nvme_scratch_virt_region[0] = sart_virtual_base;
-    nvme_scratch_virt_region[1] = S8000_NVME_SART_SIZE;
+    nvme_scratch_virt_region[1] = NVME_SART_SIZE;
     dtb_set_prop(child_s3e, "nvme-scratch-virt-region",
                  sizeof(nvme_scratch_virt_region), &nvme_scratch_virt_region);
 
@@ -1017,16 +1029,15 @@ static void s8000_create_spi0(S8000MachineState *s8000_machine)
     sysbus_realize_and_unref(SYS_BUS_DEVICE(spi), &error_fatal);
 
     sysbus_mmio_map(SYS_BUS_DEVICE(spi), 0,
-                    s8000_machine->soc_base_pa + S8000_SPI0_BASE);
+                    s8000_machine->soc_base_pa + SPI0_BASE);
 
-    sysbus_connect_irq(
-        SYS_BUS_DEVICE(spi), 0,
-        qdev_get_gpio_in(DEVICE(s8000_machine->aic), S8000_SPI0_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(spi), 0,
+                       qdev_get_gpio_in(DEVICE(s8000_machine->aic), SPI0_IRQ));
     // The second sysbus IRQ is the cs line
     gpio = DEVICE(
         object_property_get_link(OBJECT(s8000_machine), "gpio", &error_fatal));
     g_assert_nonnull(gpio);
-    qdev_connect_gpio_out(gpio, S8000_GPIO_SPI0_CS,
+    qdev_connect_gpio_out(gpio, GPIO_SPI0_CS,
                           qdev_get_gpio_in_named(spi, SSI_GPIO_CS, 0));
 }
 
@@ -1306,8 +1317,8 @@ static void s8000_display_create(S8000MachineState *s8000_machine)
     sbd = adp_v2_create(
         child,
         MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
-        &s8000_machine->video_args, S8000_DISPLAY_SIZE);
-    s8000_machine->video_args.base_addr = S8000_DISPLAY_BASE;
+        &s8000_machine->video_args, DISPLAY_SIZE);
+    s8000_machine->video_args.base_addr = DISPLAY_BASE;
     s8000_machine->video_args.display =
         !xnu_contains_boot_arg(machine->kernel_cmdline, "-s", false) &&
         !xnu_contains_boot_arg(machine->kernel_cmdline, "-v", false);
@@ -1367,32 +1378,29 @@ static void s8000_create_backlight(S8000MachineState *s8000_machine)
                             *(uint32_t *)prop->data);
 }
 
-static void s8000_cpu_reset_work(CPUState *cpu, run_on_cpu_data data)
-{
-    S8000MachineState *s8000_machine;
-
-    s8000_machine = data.host_ptr;
-    cpu_reset(cpu);
-    ARM_CPU(cpu)->env.xregs[0] = s8000_machine->boot_info.tz1_boot_args_pa;
-    cpu_set_pc(cpu, s8000_machine->boot_info.tz1_entry);
-}
-
-static void apple_a9_reset(S8000MachineState *s8000_machine)
+static void s8000_cpu_reset(S8000MachineState *s8000_machine)
 {
     CPUState *cpu;
     AppleA9State *acpu;
 
     CPU_FOREACH (cpu) {
         acpu = APPLE_A9(cpu);
-        object_property_set_int(OBJECT(cpu), "rvbar", S8000_TZ1_BASE,
-                                &error_abort);
-        if (acpu->cpu_id == 0) {
-            async_run_on_cpu(cpu, s8000_cpu_reset_work,
-                             RUN_ON_CPU_HOST_PTR(s8000_machine));
-            continue;
-        }
-        if (ARM_CPU(cpu)->power_state != PSCI_OFF) {
-            arm_reset_cpu(acpu->mpidr);
+        if (s8000_machine->securerom_filename == NULL) {
+            object_property_set_int(OBJECT(cpu), "rvbar", TZ1_BASE,
+                                    &error_abort);
+            cpu_reset(cpu);
+            if (acpu->cpu_id == 0) {
+                arm_set_cpu_on(acpu->mpidr, s8000_machine->boot_info.tz1_entry,
+                               s8000_machine->boot_info.tz1_boot_args_pa, 3,
+                               true);
+            }
+        } else {
+            object_property_set_int(OBJECT(cpu), "rvbar", SROM_BASE,
+                                    &error_abort);
+            cpu_reset(cpu);
+            if (acpu->cpu_id == 0) {
+                arm_set_cpu_on(acpu->mpidr, SROM_BASE, 0, 3, true);
+            }
         }
     }
 }
@@ -1402,19 +1410,20 @@ static void s8000_machine_reset(MachineState *machine, ResetType type)
     S8000MachineState *s8000_machine = S8000_MACHINE(machine);
     DeviceState *gpio = NULL;
 
-    qemu_devices_reset(type);
+    if (!runstate_check(RUN_STATE_RESTORE_VM)) {
+        qemu_devices_reset(type);
 
-    if (!runstate_check(RUN_STATE_RESTORE_VM) &&
-        !runstate_check(RUN_STATE_PRELAUNCH)) {
-        s8000_memory_setup(MACHINE(s8000_machine));
+        if (!runstate_check(RUN_STATE_PRELAUNCH)) {
+            s8000_memory_setup(MACHINE(s8000_machine));
+        }
+
+        s8000_cpu_reset(s8000_machine);
     }
-
-    apple_a9_reset(s8000_machine);
 
     gpio = DEVICE(
         object_property_get_link(OBJECT(s8000_machine), "gpio", &error_fatal));
 
-    qemu_set_irq(qdev_get_gpio_in(gpio, S8000_GPIO_FORCE_DFU),
+    qemu_set_irq(qdev_get_gpio_in(gpio, GPIO_FORCE_DFU),
                  s8000_machine->force_dfu);
 }
 
@@ -1434,41 +1443,16 @@ static void s8000_machine_init(MachineState *machine)
     MachoHeader64 *hdr, *secure_monitor = NULL;
     uint32_t build_version;
     uint64_t kernel_low, kernel_high;
-    uint8_t buffer[0x40];
 
     s8000_machine->sys_mem = get_system_memory();
-    allocate_ram(s8000_machine->sys_mem, "SRAM", S8000_SRAM_BASE,
-                 S8000_SRAM_SIZE, 0);
-    allocate_ram(s8000_machine->sys_mem, "DRAM", S8000_DRAM_BASE,
-                 S8000_DRAM_SIZE, 0);
-    allocate_ram(s8000_machine->sys_mem, "SEPROM", S8000_SEPROM_BASE,
-                 S8000_SEPROM_SIZE, 0);
+    allocate_ram(s8000_machine->sys_mem, "SROM", SROM_BASE, SROM_SIZE, 0);
+    allocate_ram(s8000_machine->sys_mem, "SRAM", SRAM_BASE, SRAM_SIZE, 0);
+    allocate_ram(s8000_machine->sys_mem, "DRAM", DRAM_BASE, DRAM_SIZE, 0);
+    allocate_ram(s8000_machine->sys_mem, "SEPROM", SEPROM_BASE, SEPROM_SIZE, 0);
     MemoryRegion *mr = g_new0(MemoryRegion, 1);
     memory_region_init_alias(mr, OBJECT(s8000_machine), "s8000.seprom.alias",
-                             s8000_machine->sys_mem, S8000_SEPROM_BASE,
-                             S8000_SEPROM_SIZE);
+                             s8000_machine->sys_mem, SEPROM_BASE, SEPROM_SIZE);
     memory_region_add_subregion_overlap(s8000_machine->sys_mem, 0, mr, 1);
-
-    hdr = macho_load_file(machine->kernel_filename, &secure_monitor);
-    g_assert_nonnull(hdr);
-    g_assert_nonnull(secure_monitor);
-    s8000_machine->kernel = hdr;
-    s8000_machine->secure_monitor = secure_monitor;
-    build_version = macho_build_version(hdr);
-    info_report("Loading %s %u.%u.%u...", macho_platform_string(hdr),
-                BUILD_VERSION_MAJOR(build_version),
-                BUILD_VERSION_MINOR(build_version),
-                BUILD_VERSION_PATCH(build_version));
-    s8000_machine->build_version = build_version;
-
-    macho_highest_lowest(hdr, &kernel_low, &kernel_high);
-    info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
-    info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
-
-    g_virt_base = kernel_low;
-    g_phys_base = (hwaddr)macho_get_buffer(hdr);
-
-    s8000_patch_kernel(hdr);
 
     s8000_machine->device_tree = load_dtb_from_file(machine->dtb);
     if (s8000_machine->device_tree == NULL) {
@@ -1476,9 +1460,50 @@ static void s8000_machine_init(MachineState *machine)
         return;
     }
 
-    s8000_machine->trustcache =
-        load_trustcache_from_file(s8000_machine->trustcache_filename,
-                                  &s8000_machine->boot_info.trustcache_size);
+    if (s8000_machine->securerom_filename == NULL) {
+        hdr = macho_load_file(machine->kernel_filename, &secure_monitor);
+        g_assert_nonnull(hdr);
+        g_assert_nonnull(secure_monitor);
+        s8000_machine->kernel = hdr;
+        s8000_machine->secure_monitor = secure_monitor;
+        build_version = macho_build_version(hdr);
+        info_report("%s %u.%u.%u...", macho_platform_string(hdr),
+                    BUILD_VERSION_MAJOR(build_version),
+                    BUILD_VERSION_MINOR(build_version),
+                    BUILD_VERSION_PATCH(build_version));
+        s8000_machine->build_version = build_version;
+
+        macho_highest_lowest(hdr, &kernel_low, &kernel_high);
+        info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
+        info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
+
+        g_virt_base = kernel_low;
+        g_phys_base = (hwaddr)macho_get_buffer(hdr);
+
+        s8000_patch_kernel(hdr);
+
+        s8000_machine->trustcache = load_trustcache_from_file(
+            s8000_machine->trustcache_filename,
+            &s8000_machine->boot_info.trustcache_size);
+        if (s8000_machine->ticket_filename != NULL) {
+            if (!g_file_get_contents(s8000_machine->ticket_filename,
+                                     &s8000_machine->boot_info.ticket_data,
+                                     &s8000_machine->boot_info.ticket_length,
+                                     NULL)) {
+                error_setg(&error_fatal, "Failed to read ticket from `%s`",
+                           s8000_machine->ticket_filename);
+                return;
+            }
+        }
+    } else {
+        if (!g_file_get_contents(s8000_machine->securerom_filename,
+                                 &s8000_machine->securerom,
+                                 &s8000_machine->securerom_size, NULL)) {
+            error_setg(&error_abort, "Failed to load SecureROM from `%s`",
+                       s8000_machine->securerom_filename);
+            return;
+        }
+    }
 
     dtb_set_prop_u32(s8000_machine->device_tree, "clock-frequency", 24000000);
     child = dtb_get_node(s8000_machine->device_tree, "arm-io");
@@ -1512,9 +1537,6 @@ static void s8000_machine_init(MachineState *machine)
     s8000_machine->board_id = 1; // Match with apple_aes.c
     dtb_set_prop_u32(child, "board-id", s8000_machine->board_id);
 
-    if (s8000_machine->ecid == 0) {
-        s8000_machine->ecid = 0x1122334455667788;
-    }
     dtb_set_prop_u64(child, "unique-chip-id", s8000_machine->ecid);
 
     // Update the display parameters
@@ -1563,7 +1585,7 @@ static void s8000_machine_init(MachineState *machine)
 
 static ram_addr_t s8000_machine_fixup_ram_size(ram_addr_t size)
 {
-    g_assert_cmpuint(size, ==, S8000_DRAM_SIZE);
+    g_assert_cmpuint(size, ==, DRAM_SIZE);
     return size;
 }
 
@@ -1605,35 +1627,19 @@ static char *s8000_get_boot_mode(Object *obj, Error **errp)
     }
 }
 
-static void s8000_get_ecid(Object *obj, Visitor *v, const char *name,
-                           void *opaque, Error **errp)
-{
-    uint64_t value;
-
-    value = S8000_MACHINE(obj)->ecid;
-    visit_type_uint64(v, name, &value, errp);
-}
-
-static void s8000_set_ecid(Object *obj, Visitor *v, const char *name,
-                           void *opaque, Error **errp)
-{
-    uint64_t value;
-
-    if (visit_type_uint64(v, name, &value, errp)) {
-        S8000_MACHINE(obj)->ecid = value;
-    }
-}
-
+PROP_VISIT_GETTER_SETTER(uint64, ecid);
 PROP_STR_GETTER_SETTER(trustcache_filename);
 PROP_STR_GETTER_SETTER(ticket_filename);
 PROP_STR_GETTER_SETTER(sep_rom_filename);
 PROP_STR_GETTER_SETTER(sep_fw_filename);
+PROP_STR_GETTER_SETTER(securerom_filename);
 PROP_GETTER_SETTER(bool, kaslr_off);
 PROP_GETTER_SETTER(bool, force_dfu);
 
 static void s8000_machine_class_init(ObjectClass *klass, const void *data)
 {
     MachineClass *mc;
+    ObjectProperty *oprop;
 
     mc = MACHINE_CLASS(klass);
     mc->desc = "Apple S8000 SoC (iPhone 6s Plus)";
@@ -1646,35 +1652,36 @@ static void s8000_machine_class_init(ObjectClass *klass, const void *data)
     mc->no_parallel = true;
     mc->default_cpu_type = TYPE_APPLE_A9;
     mc->minimum_page_bits = 14;
-    mc->default_ram_size = S8000_DRAM_SIZE;
+    mc->default_ram_size = DRAM_SIZE;
     mc->fixup_ram_size = s8000_machine_fixup_ram_size;
 
     object_class_property_add_str(klass, "trustcache",
                                   s8000_get_trustcache_filename,
                                   s8000_set_trustcache_filename);
-    object_class_property_set_description(klass, "trustcache",
-                                          "Trustcache to be loaded");
+    object_class_property_set_description(klass, "trustcache", "TrustCache");
     object_class_property_add_str(klass, "ticket", s8000_get_ticket_filename,
                                   s8000_set_ticket_filename);
-    object_class_property_set_description(klass, "ticket",
-                                          "APTicket to be loaded");
+    object_class_property_set_description(klass, "ticket", "AP Ticket");
     object_class_property_add_str(klass, "sep-rom", s8000_get_sep_rom_filename,
                                   s8000_set_sep_rom_filename);
-    object_class_property_set_description(klass, "sep-rom",
-                                          "SEPROM to be loaded");
+    object_class_property_set_description(klass, "sep-rom", "SEP ROM");
     object_class_property_add_str(klass, "sep-fw", s8000_get_sep_fw_filename,
                                   s8000_set_sep_fw_filename);
-    object_class_property_set_description(klass, "sep-fw",
-                                          "SEPFW to be loaded");
+    object_class_property_set_description(klass, "sep-fw", "SEP Firmware");
+    object_class_property_add_str(klass, "securerom",
+                                  s8000_get_securerom_filename,
+                                  s8000_set_securerom_filename);
+    object_class_property_set_description(klass, "securerom", "SecureROM");
     object_class_property_add_str(klass, "boot-mode", s8000_get_boot_mode,
                                   s8000_set_boot_mode);
-    object_class_property_set_description(klass, "boot-mode",
-                                          "Boot mode of the machine");
+    object_class_property_set_description(klass, "boot-mode", "Boot Mode");
     object_class_property_add_bool(klass, "kaslr-off", s8000_get_kaslr_off,
                                    s8000_set_kaslr_off);
     object_class_property_set_description(klass, "kaslr-off", "Disable KASLR");
-    object_class_property_add(klass, "ecid", "uint64", s8000_get_ecid,
-                              s8000_set_ecid, NULL, NULL);
+    oprop = object_class_property_add(klass, "ecid", "uint64", s8000_get_ecid,
+                                      s8000_set_ecid, NULL, NULL);
+    object_property_set_default_uint(oprop, 0x1122334455667788);
+    object_class_property_set_description(klass, "ecid", "Device ECID");
     object_class_property_add_bool(klass, "force-dfu", s8000_get_force_dfu,
                                    s8000_set_force_dfu);
     object_class_property_set_description(klass, "force-dfu", "Force DFU");
