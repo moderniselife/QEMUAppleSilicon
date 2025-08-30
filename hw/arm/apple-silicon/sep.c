@@ -48,6 +48,7 @@
 #include "system/address-spaces.h"
 #include "system/block-backend-global-state.h"
 #include "system/block-backend-io.h"
+#include "system/tcg.h"
 #include "trace.h"
 #include <nettle/macros.h>
 #include <nettle/memxor.h>
@@ -3233,12 +3234,15 @@ static const MemoryRegionOps progress_reg_ops = {
 
 static void apple_sep_cpu_moni_jump(CPUState *cpu, run_on_cpu_data data)
 {
-    vaddr load_addr = data.target_ptr;
+    ARMCPU *arm_cpu = ARM_CPU(cpu);
+
     DPRINTF("%s: before cpu_set_pc: base=0x%" VADDR_PRIX "\n", __func__,
             load_addr);
-    cpu_set_pc(cpu, load_addr);
-    tlb_flush(cpu); // might be needed for crashes likely caused by tb_flush
-    tb_flush(cpu); // possible workaround for intermittent sep boot errors
+    cpu_set_pc(cpu, data.target_ptr);
+
+    if (tcg_enabled()) {
+        arm_rebuild_hflags(&arm_cpu->env);
+    }
 }
 
 static void apple_sep_iop_start(AppleA7IOP *s)
@@ -3260,8 +3264,8 @@ static void apple_sep_iop_start(AppleA7IOP *s)
     if (sep->modern && load_addr != 0) {
         DPRINTF("%s: have load_addr 0x" HWADDR_FMT_plx "\n", __func__,
                 load_addr);
-        async_safe_run_on_cpu(CPU(sep->cpu), apple_sep_cpu_moni_jump,
-                              RUN_ON_CPU_TARGET_PTR(load_addr));
+        async_run_on_cpu(CPU(sep->cpu), apple_sep_cpu_moni_jump,
+                         RUN_ON_CPU_TARGET_PTR(load_addr));
     }
 }
 
