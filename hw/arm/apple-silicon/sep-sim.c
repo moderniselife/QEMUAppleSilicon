@@ -527,10 +527,11 @@ static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
         break;
     case BOOTSTRAP_OP_GET_NONCE_WORD:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GET_NONCE_WORD\n");
+        // param is the index (not offset), and needs to be returned
 
         qemu_guest_getrandom(&randval, sizeof(randval), NULL);
         apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
-                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, 0, randval);
+                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, msg->param, randval);
         break;
     case BOOTSTRAP_OP_CHECK_TZ0:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: CHECK_TZ0\n");
