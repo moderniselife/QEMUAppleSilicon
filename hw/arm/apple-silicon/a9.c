@@ -65,7 +65,7 @@ void apple_a9_cpu_start(AppleA9State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(acpu)->power_state != PSCI_ON) {
+    if (apple_a9_cpu_is_powered_off(acpu)) {
         ret = arm_set_cpu_on_and_reset(acpu->mpidr);
     }
 
