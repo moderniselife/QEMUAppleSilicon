@@ -26,6 +26,7 @@
 #include "hw/misc/apple-silicon/a7iop/mailbox/core.h"
 #include "hw/resettable.h"
 #include "qapi/error.h"
+#include "qemu/guest-random.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
 #include "qemu/main-loop.h"
@@ -207,6 +208,7 @@ enum {
     BOOTSTRAP_OP_LOAD_SEP_ART = 7,
     BOOTSTRAP_OP_NOTIFY_OS_ACTIVE_ASYNC = 13,
     BOOTSTRAP_OP_SEND_DPA = 15,
+    BOOTSTRAP_OP_OPCODE_16 = 16,
     BOOTSTRAP_OP_NOTIFY_OS_ACTIVE = 21,
     BOOTSTRAP_OP_PING_ACK = 101,
     BOOTSTRAP_OP_STATUS_REPLY = 102,
@@ -217,6 +219,7 @@ enum {
     BOOTSTRAP_OP_ART_ACCEPTED = 107,
     BOOTSTRAP_OP_RESUMED_FROM_RAM = 108,
     BOOTSTRAP_OP_DPA_SENT = 115,
+    BOOTSTRAP_OP_OPCODE_16_RESPONSE = 116,
     BOOTSTRAP_OP_LOG_RAW = 201,
     BOOTSTRAP_OP_LOG_PRINTABLE = 202,
     BOOTSTRAP_OP_ANNOUNCE_STATUS = 210,
@@ -500,12 +503,34 @@ static void apple_sep_sim_advertise_eps(AppleSEPSimState *s)
 static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
                                                SEPMessage *msg)
 {
+    uint32_t randval = 0;
     switch (msg->op) {
+    case BOOTSTRAP_OP_PING:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: PING\n");
+        // needed for S8000 and T8015
+
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_PING_ACK, 0, 0);
+        break;
     case BOOTSTRAP_OP_GET_STATUS:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GET_STATUS\n");
 
         apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
                                    BOOTSTRAP_OP_STATUS_REPLY, 0, s->status);
+        break;
+    case BOOTSTRAP_OP_GENERATE_NONCE:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GENERATE_NONCE\n");
+        // 0xa0 is the returned length in bits
+
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_NONCE_GENERATED, 0, 0xa0);
+        break;
+    case BOOTSTRAP_OP_GET_NONCE_WORD:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GET_NONCE_WORD\n");
+
+        qemu_guest_getrandom(&randval, sizeof(randval), NULL);
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, 0, randval);
         break;
     case BOOTSTRAP_OP_CHECK_TZ0:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: CHECK_TZ0\n");
@@ -533,6 +558,14 @@ static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
         apple_sep_sim_advertise_eps(s);
         break;
     }
+    case BOOTSTRAP_OP_OPCODE_16:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: OPCODE_16\n");
+        // normally returns 0x20 random bytes, split in pieces by four bytes
+
+        qemu_guest_getrandom(&randval, sizeof(randval), NULL);
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_OPCODE_16_RESPONSE, 0, randval);
+        break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: Unknown opcode %d\n",
                       msg->op);
