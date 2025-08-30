@@ -63,9 +63,26 @@
 #include "qemu/guest-random.h"
 #include "qemu/log.h"
 #include "qemu/units.h"
+#include "arm-powerctl.h"
 #include "system/reset.h"
 #include "system/runstate.h"
 #include "system/system.h"
+
+#define PROP_VISIT_GETTER_SETTER(_type, _name)                               \
+    static void t8030_get_##_name(Object *obj, Visitor *v, const char *name, \
+                                  void *opaque, Error **errp)                \
+    {                                                                        \
+        _type##_t value;                                                     \
+                                                                             \
+        value = T8030_MACHINE(obj)->_name;                                   \
+        visit_type_##_type(v, name, &value, errp);                           \
+    }                                                                        \
+                                                                             \
+    static void t8030_set_##_name(Object *obj, Visitor *v, const char *name, \
+                                  void *opaque, Error **errp)                \
+    {                                                                        \
+        visit_type_##_type(v, name, &T8030_MACHINE(obj)->_name, errp);       \
+    }
 
 #define PROP_STR_GETTER_SETTER(_name)                             \
     static char *t8030_get_##_name(Object *obj, Error **errp)     \
@@ -129,7 +146,8 @@
 #define AMCC_PLANE_STRIDE (0x40000)
 #define AMCC_LOWER(_p) (0x680 + (_p) * AMCC_PLANE_STRIDE)
 #define AMCC_UPPER(_p) (0x684 + (_p) * AMCC_PLANE_STRIDE)
-#define AMCC_WREG32(_tms, _off, _val) stl_le_p(&_tms->amcc_reg[_off], _val)
+#define AMCC_WREG32(_machine, _off, _val) \
+    stl_le_p(&_machine->amcc_reg[_off], _val)
 
 #define FUSE_ENABLED (0xA55AC33C)
 #define FUSE_DISABLED (0xA050C030)
@@ -146,8 +164,7 @@ static void t8030_start_cpus(T8030MachineState *t8030_machine,
     int i;
 
     for (i = 0; i < t8030_real_cpu_count(t8030_machine); i++) {
-        if ((cpu_mask & BIT(i)) != 0 &&
-            apple_a13_cpu_is_powered_off(t8030_machine->cpus[i])) {
+        if ((cpu_mask & BIT(i)) != 0) {
             apple_a13_cpu_start(t8030_machine->cpus[i]);
         }
     }
@@ -663,13 +680,18 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
         error_report("Failed to read NVRAM");
     }
 
-    if (t8030_machine->ticket_filename) {
-        if (!g_file_get_contents(t8030_machine->ticket_filename,
-                                 &info->ticket_data, &info->ticket_length,
-                                 NULL)) {
-            error_report("`%s` file read failed.",
-                         t8030_machine->ticket_filename);
-        }
+    t8030_machine->video_args.base_addr = carveout_alloc_mem(ca, DISPLAY_SIZE);
+    adp_v4_update_vram_mapping(
+        APPLE_DISPLAY_PIPE_V4(object_property_get_link(OBJECT(t8030_machine),
+                                                       "disp0", &error_abort)),
+        machine->ram, t8030_machine->video_args.base_addr - DRAM_BASE,
+        DISPLAY_SIZE);
+
+    if (t8030_machine->securerom_filename != NULL) {
+        address_space_rw(&address_space_memory, SROM_BASE,
+                         MEMTXATTRS_UNSPECIFIED, t8030_machine->securerom,
+                         t8030_machine->securerom_size, 1);
+        return;
     }
 
     DTBNode *chosen = dtb_get_node(t8030_machine->device_tree, "chosen");
@@ -703,17 +725,10 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
 
     DTBNode *vram = dtb_get_node(t8030_machine->device_tree, "vram");
     if (vram) {
-        t8030_machine->video_args.base_addr =
-            carveout_alloc_mem(ca, DISPLAY_SIZE);
         uint64_t vram_reg[2];
         vram_reg[0] = t8030_machine->video_args.base_addr;
         vram_reg[1] = DISPLAY_SIZE;
         dtb_set_prop(vram, "reg", sizeof(vram_reg), &vram_reg);
-        adp_v4_update_vram_mapping(
-            APPLE_DISPLAY_PIPE_V4(object_property_get_link(
-                OBJECT(t8030_machine), "disp0", &error_abort)),
-            machine->ram, t8030_machine->video_args.base_addr - DRAM_BASE,
-            vram_reg[1]);
     }
 
     hdr = t8030_machine->kernel;
@@ -898,9 +913,7 @@ static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
             } else if (data & (1 << 10)) {
                 apple_a13_cpu_off(APPLE_A13(sep->cpu));
             } else {
-                if (apple_a13_cpu_is_powered_off(APPLE_A13(sep->cpu))) {
-                    apple_a13_cpu_start(APPLE_A13(sep->cpu));
-                }
+                apple_a13_cpu_start(APPLE_A13(sep->cpu));
             }
         }
         break;
@@ -2204,8 +2217,7 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
     sep = apple_sep_create(
         child,
         MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
-        SEPROM_BASE, A13_MAX_CPU + 1, t8030_machine->build_version, true,
-        chip_id);
+        SEPROM_BASE, A13_MAX_CPU, t8030_machine->build_version, true, chip_id);
     g_assert_nonnull(sep);
 
     object_property_add_child(OBJECT(t8030_machine), "sep", OBJECT(sep));
@@ -2498,16 +2510,6 @@ static void t8030_create_buttons(T8030MachineState *t8030_machine)
     sysbus_realize_and_unref(buttons, &error_fatal);
 }
 
-static void t8030_cpu_reset_work(CPUState *cpu, run_on_cpu_data data)
-{
-    T8030MachineState *t8030_machine;
-
-    t8030_machine = data.host_ptr;
-    cpu_reset(cpu);
-    ARM_CPU(cpu)->env.xregs[0] = t8030_machine->boot_info.kern_boot_args_addr;
-    cpu_set_pc(cpu, t8030_machine->boot_info.kern_entry);
-}
-
 static void t8030_cpu_reset(T8030MachineState *t8030_machine)
 {
     CPUState *cpu;
@@ -2520,21 +2522,31 @@ static void t8030_cpu_reset(T8030MachineState *t8030_machine)
 
     CPU_FOREACH (cpu) {
         acpu = APPLE_A13(cpu);
-        if (acpu->cpu_id == A13_MAX_CPU + 1) {
-            continue;
-        }
 
-        object_property_set_uint(OBJECT(cpu), "rvbar",
-                                 t8030_machine->boot_info.kern_entry & ~0xFFF,
-                                 &error_abort);
         object_property_set_uint(OBJECT(cpu), "pauth-mlo", m_lo, &error_abort);
         object_property_set_uint(OBJECT(cpu), "pauth-mhi", m_hi, &error_abort);
 
-        if (acpu->cpu_id == 0) {
-            async_run_on_cpu(cpu, t8030_cpu_reset_work,
-                             RUN_ON_CPU_HOST_PTR(t8030_machine));
+        if (t8030_machine->securerom_filename == NULL) {
+            if (acpu->cpu_id != A13_MAX_CPU) {
+                object_property_set_uint(
+                    OBJECT(cpu), "rvbar",
+                    t8030_machine->boot_info.kern_entry & ~0xFFF, &error_abort);
+                cpu_reset(cpu);
+            }
+            if (acpu->cpu_id == 0) {
+                arm_set_cpu_on(acpu->mpidr, t8030_machine->boot_info.kern_entry,
+                               t8030_machine->boot_info.kern_boot_args_addr, 1,
+                               true);
+            }
         } else {
-            apple_a13_cpu_reset(acpu);
+            if (acpu->cpu_id != A13_MAX_CPU) {
+                object_property_set_uint(OBJECT(cpu), "rvbar", SROM_BASE,
+                                         &error_abort);
+                cpu_reset(cpu);
+            }
+            if (acpu->cpu_id == 0) {
+                arm_set_cpu_on(acpu->mpidr, SROM_BASE, 0, 1, true);
+            }
         }
     }
 }
@@ -2544,21 +2556,23 @@ static void t8030_machine_reset(MachineState *machine, ResetType type)
     T8030MachineState *t8030_machine = T8030_MACHINE(machine);
     DeviceState *gpio;
 
-    qemu_devices_reset(type);
-
-    memset(&t8030_machine->pmgr_reg, 0, sizeof(t8030_machine->pmgr_reg));
-
-    if (!runstate_check(RUN_STATE_RESTORE_VM) &&
-        !runstate_check(RUN_STATE_PRELAUNCH)) {
-        t8030_memory_setup(t8030_machine);
+    if (!runstate_check(RUN_STATE_RESTORE_VM)) {
+        memset(&t8030_machine->pmgr_reg, 0, sizeof(t8030_machine->pmgr_reg));
 
         pmgr_unk_e4800 = 0;
         // maybe also reset pmgr_unk_e4000 array
         // Ah, what the heck. Let's do it.
         memset(pmgr_unk_e4000, 0, sizeof(pmgr_unk_e4000));
+
+        qemu_devices_reset(type);
+
+        if (!runstate_check(RUN_STATE_PRELAUNCH)) {
+            t8030_memory_setup(t8030_machine);
+        }
+
+        t8030_cpu_reset(t8030_machine);
     }
 
-    t8030_cpu_reset(t8030_machine);
 
     gpio = DEVICE(
         object_property_get_link(OBJECT(t8030_machine), "gpio", &error_fatal));
@@ -2609,6 +2623,7 @@ static void t8030_machine_init(MachineState *machine)
     allocate_ram(get_system_memory(), "SROM", SROM_BASE, SROM_SIZE, 0);
     allocate_ram(get_system_memory(), "SRAM", SRAM_BASE, SRAM_SIZE, 0);
     memory_region_add_subregion(get_system_memory(), DRAM_BASE, machine->ram);
+
     if (t8030_machine->sep_rom_filename != NULL) {
         allocate_ram(get_system_memory(), "SEPROM", SEPROM_BASE, SEPROM_SIZE,
                      0);
@@ -2638,16 +2653,23 @@ static void t8030_machine_init(MachineState *machine)
         allocate_ram(get_system_memory(), "SEP_UNKN14", 0x240A80000ULL, 0x4000,
                      0);
     }
-    if (t8030_machine->sep_fw_filename) {
+
+    if (t8030_machine->sep_fw_filename != NULL) {
         allocate_ram(get_system_memory(), "SEPFW_", 0x0, SEP_DMA_MAPPING_SIZE,
                      0);
+    }
+
+    t8030_machine->device_tree = load_dtb_from_file(machine->dtb);
+    if (t8030_machine->device_tree == NULL) {
+        error_setg(&error_abort, "Failed to load device tree");
+        return;
     }
 
     hdr = macho_load_file(machine->kernel_filename, NULL);
     g_assert_nonnull(hdr);
     t8030_machine->kernel = hdr;
     build_version = macho_build_version(hdr);
-    info_report("Loading %s %u.%u.%u...", macho_platform_string(hdr),
+    info_report("%s %u.%u.%u", macho_platform_string(hdr),
                 BUILD_VERSION_MAJOR(build_version),
                 BUILD_VERSION_MINOR(build_version),
                 BUILD_VERSION_PATCH(build_version));
@@ -2685,24 +2707,39 @@ static void t8030_machine_init(MachineState *machine)
         break;
     }
 
-    macho_highest_lowest(hdr, &kernel_low, &kernel_high);
-    info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
-    info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
+    if (t8030_machine->securerom_filename == NULL) {
+        macho_highest_lowest(hdr, &kernel_low, &kernel_high);
+        info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kernel_low);
+        info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kernel_high);
 
-    g_virt_base = kernel_low;
-    g_phys_base = (hwaddr)macho_get_buffer(hdr);
+        g_virt_base = kernel_low;
+        g_phys_base = (hwaddr)macho_get_buffer(hdr);
 
-    t8030_patch_kernel(hdr, build_version);
+        t8030_patch_kernel(hdr, build_version);
 
-    t8030_machine->device_tree = load_dtb_from_file(machine->dtb);
-    if (t8030_machine->device_tree == NULL) {
-        error_setg(&error_abort, "Failed to load device tree");
-        return;
+        t8030_machine->trustcache = load_trustcache_from_file(
+            t8030_machine->trustcache_filename,
+            &t8030_machine->boot_info.trustcache_size);
+
+        if (t8030_machine->ticket_filename != NULL) {
+            if (!g_file_get_contents(t8030_machine->ticket_filename,
+                                     &t8030_machine->boot_info.ticket_data,
+                                     &t8030_machine->boot_info.ticket_length,
+                                     NULL)) {
+                error_setg(&error_fatal, "Failed to read ticket from `%s`",
+                           t8030_machine->ticket_filename);
+                return;
+            }
+        }
+    } else {
+        if (!g_file_get_contents(t8030_machine->securerom_filename,
+                                 &t8030_machine->securerom,
+                                 &t8030_machine->securerom_size, NULL)) {
+            error_setg(&error_abort, "Failed to load SecureROM from `%s`",
+                       t8030_machine->securerom_filename);
+            return;
+        }
     }
-
-    t8030_machine->trustcache =
-        load_trustcache_from_file(t8030_machine->trustcache_filename,
-                                  &t8030_machine->boot_info.trustcache_size);
 
     dtb_set_prop_u32(t8030_machine->device_tree, "clock-frequency", 24000000);
     child = dtb_get_node(t8030_machine->device_tree, "arm-io");
@@ -2836,14 +2873,9 @@ static ram_addr_t t8030_machine_fixup_ram_size(ram_addr_t size)
     return ROUND_UP_16K(size);
 }
 
-PROP_STR_GETTER_SETTER(trustcache_filename);
-PROP_STR_GETTER_SETTER(ticket_filename);
-PROP_STR_GETTER_SETTER(sep_rom_filename);
-PROP_STR_GETTER_SETTER(sep_fw_filename);
-
 static void t8030_set_boot_mode(Object *obj, const char *value, Error **errp)
 {
-    BootMode boot_mode;
+    AppleBootMode boot_mode;
 
     if (g_str_equal(value, "auto")) {
         boot_mode = kBootModeAuto;
@@ -2875,49 +2907,17 @@ static char *t8030_get_boot_mode(Object *obj, Error **errp)
     }
 }
 
-static void t8030_get_ecid(Object *obj, Visitor *v, const char *name,
-                           void *opaque, Error **errp)
-{
-    uint64_t value;
-
-    value = T8030_MACHINE(obj)->ecid;
-    visit_type_uint64(v, name, &value, errp);
-}
-
-static void t8030_set_ecid(Object *obj, Visitor *v, const char *name,
-                           void *opaque, Error **errp)
-{
-    uint64_t value;
-
-    if (visit_type_uint64(v, name, &value, errp)) {
-        T8030_MACHINE(obj)->ecid = value;
-    }
-}
-
+PROP_VISIT_GETTER_SETTER(uint64, ecid);
 PROP_GETTER_SETTER(bool, kaslr_off);
 PROP_GETTER_SETTER(bool, force_dfu);
 PROP_GETTER_SETTER(int, usb_conn_type);
+PROP_STR_GETTER_SETTER(trustcache_filename);
+PROP_STR_GETTER_SETTER(ticket_filename);
+PROP_STR_GETTER_SETTER(sep_rom_filename);
+PROP_STR_GETTER_SETTER(sep_fw_filename);
+PROP_STR_GETTER_SETTER(securerom_filename);
 PROP_STR_GETTER_SETTER(usb_conn_addr);
-
-static void t8030_get_usb_conn_port(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    uint16_t value;
-
-    value = T8030_MACHINE(obj)->usb_conn_port;
-    visit_type_uint16(v, name, &value, errp);
-}
-
-static void t8030_set_usb_conn_port(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    uint16_t value;
-
-    if (visit_type_uint16(v, name, &value, errp)) {
-        T8030_MACHINE(obj)->usb_conn_port = value;
-    }
-}
-
+PROP_VISIT_GETTER_SETTER(uint16, usb_conn_port);
 PROP_STR_GETTER_SETTER(model_number);
 PROP_STR_GETTER_SETTER(region_info);
 PROP_STR_GETTER_SETTER(config_number);
@@ -2957,6 +2957,10 @@ static void t8030_machine_class_init(ObjectClass *klass, const void *data)
     object_class_property_add_str(klass, "sep-fw", t8030_get_sep_fw_filename,
                                   t8030_set_sep_fw_filename);
     object_class_property_set_description(klass, "sep-fw", "SEP Firmware");
+    object_class_property_add_str(klass, "securerom",
+                                  t8030_get_securerom_filename,
+                                  t8030_set_securerom_filename);
+    object_class_property_set_description(klass, "securerom", "SecureROM");
     oprop = object_class_property_add_str(
         klass, "boot-mode", t8030_get_boot_mode, t8030_set_boot_mode);
     object_property_set_default_str(oprop, "auto");

@@ -46,7 +46,7 @@ typedef enum {
     kBootModeManual,
     kBootModeEnterRecovery,
     kBootModeExitRecovery,
-} BootMode;
+} AppleBootMode;
 
 typedef struct {
     MachineState parent;
@@ -60,13 +60,16 @@ typedef struct {
     MachoHeader64 *kernel;
     DTBNode *device_tree;
     uint8_t *trustcache;
+    char *securerom;
+    gsize securerom_size;
     AppleBootInfo boot_info;
     AppleVideoArgs video_args;
     char *trustcache_filename;
     char *ticket_filename;
     char *sep_rom_filename;
     char *sep_fw_filename;
-    BootMode boot_mode;
+    char *securerom_filename;
+    AppleBootMode boot_mode;
     uint32_t rtkit_protocol_ver;
     uint32_t sio_protocol;
     uint32_t build_version;

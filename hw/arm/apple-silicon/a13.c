@@ -134,7 +134,7 @@ void apple_a13_cpu_start(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(acpu)->power_state != PSCI_ON) {
+    if (apple_a13_cpu_is_powered_off(acpu)) {
         ret = arm_set_cpu_on_and_reset(acpu->mpidr);
     }
 
@@ -147,7 +147,7 @@ void apple_a13_cpu_reset(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (ARM_CPU(acpu)->power_state != PSCI_OFF) {
+    if (!apple_a13_cpu_is_powered_off(acpu)) {
         ret = arm_reset_cpu(acpu->mpidr);
     }
 
@@ -727,14 +727,10 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
         dtb_remove_prop_named(node, "cpu-uttdbg-reg");
     }
 
-    if (acpu->cpu_id == 0 || node == NULL) {
-        if (node != NULL) {
-            dtb_set_prop_str(node, "state", "running");
-        }
-        object_property_set_bool(obj, "start-powered-off", false, NULL);
-    } else {
-        object_property_set_bool(obj, "start-powered-off", true, NULL);
+    if (acpu->cpu_id == 0) {
+        dtb_set_prop_str(node, "state", "running");
     }
+    object_property_set_bool(obj, "start-powered-off", true, NULL);
 
     // Need to set the CPU frequencies instead of iBoot
     if (node) {
@@ -757,9 +753,7 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
     memory_region_add_subregion_overlap(&acpu->memory, 0, &acpu->sysmem, -2);
 
     if (node) {
-        // dtb_remove_prop_named(node, "cpu-impl-reg");
         dtb_remove_prop_named(node, "coresight-reg");
-        // dtb_remove_prop_named(node, "cpm-impl-reg");
     }
 
     return acpu;
