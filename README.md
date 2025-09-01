@@ -1,4 +1,4 @@
-# QEMU Apple Silicon Fork
+# QEMU Apple Silicon Fork ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ChefKissInc/QEMUAppleSilicon/build.yaml?style=for-the-badge) ![Written by humans, not AI](https://img.shields.io/badge/written_by_humans-not_ai-blue?style=for-the-badge)
 
 This is a fork of QEMU which provides Apple ARM device guest support.
 
