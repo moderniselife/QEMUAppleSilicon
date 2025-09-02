@@ -221,6 +221,7 @@ static void apple_buttons_realize(DeviceState *dev, Error **errp)
     QemuInputHandlerState *s =
         qemu_input_handler_register(dev, &apple_buttons_handler);
     qemu_input_handler_activate(s);
+    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_OTHER, true);
 }
 
 static void apple_buttons_unrealize(DeviceState *dev)
