@@ -24,7 +24,7 @@ body:
     id: description
     attributes:
       label: Describe the feature in detail.
-      placeholder: I want NootedRed to be able to do Y.
+      placeholder: I want QEMUAppleSilicon to be able to do Y.
     validations:
       required: true
   - type: textarea
