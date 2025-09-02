@@ -44,44 +44,14 @@
 #define TYPE_APPLE_BUTTONS "apple.buttons"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleButtonsState, APPLE_BUTTONS)
 
-typedef enum {
-    BUTTON_FORCE_SHUTDOWN = 0,
-    BUTTON_POWER,
-    BUTTON_VOL_UP,
-    BUTTON_VOL_DOWN,
-    BUTTON_RINGER,
-    BUTTON_HELP,
-    BUTTON_MENU,
-    BUTTON_HELP_DOUBLE,
-    BUTTON_HALL_EFFECT_1,
-    BUTTON_HALL_EFFECT,
-    BUTTON_COUNT,
-} AppleSMCHIDButton;
-
 struct AppleButtonsState {
     /*< private >*/
     SysBusDevice parent_obj;
 
     /*< public >*/
     QemuMutex mutex;
-    bool states[BUTTON_COUNT];
+    bool states[SMC_HID_BUTTON_COUNT];
 };
-
-static void apple_buttons_send_notif(AppleSMCState *s, AppleSMCHIDButton button,
-                                     bool state)
-{
-    AppleRTKit *rtk;
-    KeyResponse r;
-    rtk = APPLE_RTKIT(s);
-
-    memset(&r, 0, sizeof(r));
-    r.status = SMC_NOTIFICATION;
-    r.response[0] = state;
-    r.response[1] = button;
-    r.response[2] = kSMCHIDEventNotifyTypeButton;
-    r.response[3] = kSMCEventHIDEventNotify;
-    apple_rtkit_send_user_msg(rtk, kSMCKeyEndpoint, r.raw);
-}
 
 static void apple_buttons_handle_event(DeviceState *dev, QemuConsole *src,
                                        InputEvent *evt)
@@ -105,38 +75,38 @@ static void apple_buttons_handle_event(DeviceState *dev, QemuConsole *src,
 
     switch (qcode) {
     case Q_KEY_CODE_F1:
-        button = BUTTON_FORCE_SHUTDOWN;
+        button = SMC_HID_BUTTON_FORCE_SHUTDOWN;
         break;
     case Q_KEY_CODE_F2:
         if (key->down) {
-            button = BUTTON_RINGER;
+            button = SMC_HID_BUTTON_RINGER;
             s->states[button] = !s->states[button];
-            apple_buttons_send_notif(smc, button, s->states[button]);
+            apple_smc_send_hid_button(smc, button, s->states[button]);
         }
         return;
     case Q_KEY_CODE_F3:
-        button = BUTTON_VOL_DOWN;
+        button = SMC_HID_BUTTON_VOL_DOWN;
         break;
     case Q_KEY_CODE_F4:
-        button = BUTTON_VOL_UP;
+        button = SMC_HID_BUTTON_VOL_UP;
         break;
     case Q_KEY_CODE_F5:
-        button = BUTTON_POWER;
+        button = SMC_HID_BUTTON_POWER;
         break;
     case Q_KEY_CODE_F6:
-        button = BUTTON_MENU;
+        button = SMC_HID_BUTTON_MENU;
         break;
     case Q_KEY_CODE_F7:
-        button = BUTTON_HELP;
+        button = SMC_HID_BUTTON_HELP;
         break;
     case Q_KEY_CODE_F8:
-        button = BUTTON_HELP_DOUBLE;
+        button = SMC_HID_BUTTON_HELP_DOUBLE;
         break;
     case Q_KEY_CODE_F9:
-        button = BUTTON_HALL_EFFECT_1;
+        button = SMC_HID_BUTTON_HALL_EFFECT_1;
         break;
     case Q_KEY_CODE_F10:
-        button = BUTTON_HALL_EFFECT;
+        button = SMC_HID_BUTTON_HALL_EFFECT;
         break;
     default:
         return;
@@ -144,7 +114,7 @@ static void apple_buttons_handle_event(DeviceState *dev, QemuConsole *src,
 
     if (s->states[button] != key->down) {
         s->states[button] = key->down;
-        apple_buttons_send_notif(smc, button, key->down);
+        apple_smc_send_hid_button(smc, button, key->down);
     }
 }
 
@@ -264,7 +234,7 @@ static const VMStateDescription vmstate_apple_buttons = {
     .minimum_version_id = 0,
     .fields =
         (const VMStateField[]){
-            VMSTATE_BOOL_ARRAY(states, AppleButtonsState, BUTTON_COUNT),
+            VMSTATE_BOOL_ARRAY(states, AppleButtonsState, SMC_HID_BUTTON_COUNT),
             VMSTATE_END_OF_LIST(),
         }
 };

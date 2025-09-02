@@ -97,7 +97,7 @@ enum SMCHIDEventNotifyType {
     kSMCHIDEventNotifyTypeLidState = 3,
 };
 
-#define kSMCKeyEndpoint 0
+#define kSMCKeyEndpoint (0)
 
 enum SMCAttr {
     SMC_ATTR_LITTLE_ENDIAN = BIT(2),
@@ -107,6 +107,20 @@ enum SMCAttr {
     SMC_ATTR_DEFAULT = SMC_ATTR_READABLE | SMC_ATTR_WRITEABLE,
     SMC_ATTR_DEFAULT_LE = SMC_ATTR_LITTLE_ENDIAN | SMC_ATTR_DEFAULT,
 };
+
+typedef enum {
+    SMC_HID_BUTTON_FORCE_SHUTDOWN = 0,
+    SMC_HID_BUTTON_POWER,
+    SMC_HID_BUTTON_VOL_UP,
+    SMC_HID_BUTTON_VOL_DOWN,
+    SMC_HID_BUTTON_RINGER,
+    SMC_HID_BUTTON_HELP,
+    SMC_HID_BUTTON_MENU,
+    SMC_HID_BUTTON_HELP_DOUBLE,
+    SMC_HID_BUTTON_HALL_EFFECT_1,
+    SMC_HID_BUTTON_HALL_EFFECT,
+    SMC_HID_BUTTON_COUNT,
+} AppleSMCHIDButton;
 
 typedef struct SMCKey SMCKey;
 typedef struct SMCKeyData SMCKeyData;
@@ -162,5 +176,7 @@ SMCKey *apple_smc_create_key_func(AppleSMCState *s, uint32_t key, uint32_t size,
                                   KeyReader reader, KeyWriter writer);
 uint8_t apple_smc_set_key(AppleSMCState *s, uint32_t key, uint32_t size,
                           void *data);
+void apple_smc_send_hid_button(AppleSMCState *s, AppleSMCHIDButton button,
+                               bool state);
 
 #endif /* HW_MISC_APPLE_SILICON_SMC_H */

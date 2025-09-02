@@ -34,6 +34,7 @@ struct AppleSMCState {
     uint32_t key_count;
     uint8_t *sram;
     uint32_t sram_size;
+    bool is_booted;
 };
 
 SMCKey *apple_smc_get_key(AppleSMCState *s, uint32_t key)
@@ -140,6 +141,27 @@ uint8_t apple_smc_set_key(AppleSMCState *s, uint32_t key, uint32_t size,
     memcpy(data_entry->data, data, size);
 
     return kSMCSuccess;
+}
+
+void apple_smc_send_hid_button(AppleSMCState *s, AppleSMCHIDButton button,
+                               bool state)
+{
+    AppleRTKit *rtk;
+    KeyResponse r;
+
+    if (!s->is_booted) {
+        return;
+    }
+
+    rtk = APPLE_RTKIT(s);
+
+    memset(&r, 0, sizeof(r));
+    r.status = SMC_NOTIFICATION;
+    r.response[0] = state;
+    r.response[1] = button;
+    r.response[2] = kSMCHIDEventNotifyTypeButton;
+    r.response[3] = kSMCEventHIDEventNotify;
+    apple_rtkit_send_user_msg(rtk, kSMCKeyEndpoint, r.raw);
 }
 
 static uint8_t smc_key_count_read(AppleSMCState *s, SMCKey *key,
@@ -347,6 +369,16 @@ static const MemoryRegionOps ascv2_core_reg_ops = {
     .valid.unaligned = false,
 };
 
+static void apple_smc_boot_done(void *opaque)
+{
+    AppleSMCState *s = opaque;
+    s->is_booted = true;
+}
+
+static const AppleRTKitOps apple_smc_rtkit_ops = {
+    .boot_done = apple_smc_boot_done,
+};
+
 SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                                uint32_t protocol_version, uint64_t sram_size)
 {
@@ -392,7 +424,8 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
 
     reg = (uint64_t *)prop->data;
 
-    apple_rtkit_init(rtk, NULL, "SMC", reg[1], version, protocol_version, NULL);
+    apple_rtkit_init(rtk, NULL, "SMC", reg[1], version, protocol_version,
+                     &apple_smc_rtkit_ops);
     apple_rtkit_register_user_ep(rtk, kSMCKeyEndpoint, s,
                                  &apple_smc_handle_key_endpoint);
 
@@ -409,7 +442,6 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                                       OBJECT(dev), TYPE_APPLE_SMC_IOP ".sram",
                                       s->sram_size, s->sram);
     sysbus_init_mmio(sbd, s->iomems[APPLE_SMC_MMIO_SRAM]);
-
 
     dtb_set_prop_u32(child, "pre-loaded", 1);
     dtb_set_prop_u32(child, "running", 1);
@@ -682,6 +714,7 @@ static void apple_smc_reset_hold(Object *obj, ResetType type)
     }
 
     memset(s->sram, 0, s->sram_size);
+    s->is_booted = false;
 }
 
 static void apple_smc_class_init(ObjectClass *klass, const void *data)
