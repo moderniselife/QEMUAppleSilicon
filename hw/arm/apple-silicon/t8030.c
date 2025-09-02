@@ -2190,7 +2190,6 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
     DTBNode *child;
     AppleSEPState *sep;
     DTBProp *prop;
-    uint64_t *reg;
     uint32_t *ints;
     AppleDARTState *dart;
 
@@ -2224,46 +2223,39 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
 
     prop = dtb_find_prop(child, "reg");
     g_assert_nonnull(prop);
-    reg = (uint64_t *)prop->data;
-    // AKF_MBOX reg is handled here, using the device tree.
-    // XPRT_{PMSC,FUSE,MISC} regs are not handled in this function.
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 0,
-                    t8030_machine->soc_base_pa + reg[0]);
-    // PMGR_BASE T8020/T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 1,
+
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_AKF_MBOX,
+                    t8030_machine->soc_base_pa + ldq_le_p(prop->data));
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_PMGR,
                     t8030_machine->soc_base_pa + 0x41000000);
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 2,
-                    t8030_machine->soc_base_pa + 0x41180000); // TRNG_REGS T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 3,
-                    t8030_machine->soc_base_pa + 0x411c0000); // KEY_BASE T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 4,
-                    t8030_machine->soc_base_pa + 0x41440000); // KEY_FCFG T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 5,
-                    t8030_machine->soc_base_pa + 0x413c0000); // MONI_BASE T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 6,
-                    t8030_machine->soc_base_pa + 0x41400000); // MONI_THRM T8030
-    // EISP_BASE T8020/T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 7,
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_TRNG_REGS,
+                    t8030_machine->soc_base_pa + 0x41180000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_KEY,
+                    t8030_machine->soc_base_pa + 0x411C0000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_KEY_FCFG,
+                    t8030_machine->soc_base_pa + 0x41440000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_MONI,
+                    t8030_machine->soc_base_pa + 0x413C0000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_MONI_THRM,
+                    t8030_machine->soc_base_pa + 0x41400000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_EISP,
                     t8030_machine->soc_base_pa + 0x40800000);
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 8,
-                    t8030_machine->soc_base_pa + 0x40aa0000); // EISP_HMAC T8030
-    // AESS_BASE T8020/T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 9,
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_EISP_HMAC,
+                    t8030_machine->soc_base_pa + 0x40AA0000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_AESS,
                     t8030_machine->soc_base_pa + 0x41040000);
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 10,
-                    t8030_machine->soc_base_pa + 0x41080000); // AESH_BASE T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 11,
-                    t8030_machine->soc_base_pa + 0x41100000); // PKA_BASE T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 12,
-                    t8030_machine->soc_base_pa + 0x41504000); // PKA_TMM T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 13,
-                    t8030_machine->soc_base_pa + 0x410C4000); // MISC2 T80[23]0
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 14,
-                    t8030_machine->soc_base_pa +
-                        0x41280000); // encrypted progress counter T8030
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), 15,
-                    t8030_machine->soc_base_pa +
-                        0x41500000); // boot monitor T8030
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_AESH,
+                    t8030_machine->soc_base_pa + 0x41080000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_PKA,
+                    t8030_machine->soc_base_pa + 0x41100000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_PKA_TMM,
+                    t8030_machine->soc_base_pa + 0x41504000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_MISC2,
+                    t8030_machine->soc_base_pa + 0x410C4000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_PROGRESS,
+                    t8030_machine->soc_base_pa + 0x41280000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_BOOT_MONI,
+                    t8030_machine->soc_base_pa + 0x41500000);
 
     prop = dtb_find_prop(child, "interrupts");
     g_assert_nonnull(prop);
