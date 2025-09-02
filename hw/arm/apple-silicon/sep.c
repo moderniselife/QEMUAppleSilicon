@@ -3359,55 +3359,50 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
     // AKF_MBOX reg is handled using the device tree
     // XPRT_{PMSC,FUSE,MISC} regs are handled in t8030.c
     memory_region_init_io(&s->pmgr_base_mr, OBJECT(dev), &pmgr_base_reg_ops, s,
-                          "sep.pmgr_base", PMGR_BASE_REG_SIZE); // T8030
+                          "sep.pmgr_base", PMGR_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->pmgr_base_mr);
     memory_region_init_io(&s->trng_regs_mr, OBJECT(dev), &trng_regs_reg_ops,
-                          &s->trng_state, "sep.trng_regs",
-                          TRNG_REGS_REG_SIZE); // T8030
+                          &s->trng_state, "sep.trng_regs", TRNG_REGS_REG_SIZE);
     sysbus_init_mmio(sbd, &s->trng_regs_mr);
     memory_region_init_io(&s->key_base_mr, OBJECT(dev), &key_base_reg_ops, s,
-                          "sep.key_base", KEY_BASE_REG_SIZE); // T8030
+                          "sep.key_base", KEY_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->key_base_mr);
     memory_region_init_io(&s->key_fcfg_mr, OBJECT(dev), &key_fcfg_reg_ops, s,
-                          "sep.key_fcfg", KEY_FCFG_REG_SIZE); // T8030
+                          "sep.key_fcfg", KEY_FCFG_REG_SIZE);
     sysbus_init_mmio(sbd, &s->key_fcfg_mr);
     memory_region_init_io(&s->moni_base_mr, OBJECT(dev), &moni_base_reg_ops, s,
-                          "sep.moni_base", MONI_BASE_REG_SIZE); // T8030
+                          "sep.moni_base", MONI_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->moni_base_mr);
     memory_region_init_io(&s->moni_thrm_mr, OBJECT(dev), &moni_thrm_reg_ops, s,
-                          "sep.moni_thrm", MONI_THRM_REG_SIZE); // T8030
+                          "sep.moni_thrm", MONI_THRM_REG_SIZE);
     sysbus_init_mmio(sbd, &s->moni_thrm_mr);
-    // EISP_BASE T8020/T8030
     memory_region_init_io(&s->eisp_base_mr, OBJECT(dev), &eisp_base_reg_ops, s,
                           "sep.eisp_base", EISP_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->eisp_base_mr);
     memory_region_init_io(&s->eisp_hmac_mr, OBJECT(dev), &eisp_hmac_reg_ops, s,
-                          "sep.eisp_hmac", EISP_HMAC_REG_SIZE); // T8030
+                          "sep.eisp_hmac", EISP_HMAC_REG_SIZE);
     sysbus_init_mmio(sbd, &s->eisp_hmac_mr);
     memory_region_init_io(&s->aess_base_mr, OBJECT(dev), &aess_base_reg_ops,
-                          &s->aess_state, "sep.aess_base",
-                          AESS_BASE_REG_SIZE); // AESS_BASE T8030
+                          &s->aess_state, "sep.aess_base", AESS_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->aess_base_mr);
     memory_region_init_io(&s->aesh_base_mr, OBJECT(dev), &aesh_base_reg_ops, s,
-                          "sep.aesh_base", AESH_BASE_REG_SIZE); // T8030
+                          "sep.aesh_base", AESH_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->aesh_base_mr);
     memory_region_init_io(&s->pka_base_mr, OBJECT(dev), &pka_base_reg_ops,
-                          &s->pka_state, "sep.pka_base",
-                          PKA_BASE_REG_SIZE); // PKA_BASE T8030
+                          &s->pka_state, "sep.pka_base", PKA_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->pka_base_mr);
     memory_region_init_io(&s->pka_tmm_mr, OBJECT(dev), &pka_tmm_reg_ops, s,
-                          "sep.pka_tmm", PKA_TMM_REG_SIZE); // T8030
+                          "sep.pka_tmm", PKA_TMM_REG_SIZE);
     sysbus_init_mmio(sbd, &s->pka_tmm_mr);
     memory_region_init_io(&s->misc2_mr, OBJECT(dev), &misc2_reg_ops, s,
                           "sep.misc2", MISC2_REG_SIZE);
     sysbus_init_mmio(sbd, &s->misc2_mr);
     memory_region_init_io(&s->progress_mr, OBJECT(dev), &progress_reg_ops, s,
-                          "sep.progress",
-                          PROGRESS_REG_SIZE); // Encrypted progress counter?
+                          "sep.progress", PROGRESS_REG_SIZE);
     sysbus_init_mmio(sbd, &s->progress_mr);
     memory_region_init_io(&s->boot_monitor_mr, OBJECT(dev),
                           &boot_monitor_reg_ops, s, "sep.boot_monitor",
-                          BOOT_MONITOR_REG_SIZE); // T8030
+                          BOOT_MONITOR_REG_SIZE);
     sysbus_init_mmio(sbd, &s->boot_monitor_mr);
 #ifdef SEP_ENABLE_DEBUG_TRACE_MAPPING
     // TODO: Let's think about something for T8015
