@@ -11,9 +11,11 @@ OBJECT_DECLARE_TYPE(AppleSIOState, AppleSIOClass, APPLE_SIO)
 
 typedef struct AppleSIODMAEndpoint AppleSIODMAEndpoint;
 
-int apple_sio_dma_read(AppleSIODMAEndpoint *ep, void *buffer, size_t len);
-int apple_sio_dma_write(AppleSIODMAEndpoint *ep, void *buffer, size_t len);
-int apple_sio_dma_remaining(AppleSIODMAEndpoint *ep);
+uint64_t apple_sio_dma_read(AppleSIODMAEndpoint *ep, void *buffer,
+                            uint64_t len);
+uint64_t apple_sio_dma_write(AppleSIODMAEndpoint *ep, void *buffer,
+                             uint64_t len);
+uint64_t apple_sio_dma_remaining(AppleSIODMAEndpoint *ep);
 AppleSIODMAEndpoint *apple_sio_get_endpoint(AppleSIOState *s, int ep);
 AppleSIODMAEndpoint *apple_sio_get_endpoint_from_node(AppleSIOState *s,
                                                       DTBNode *node, int idx);
