@@ -3240,8 +3240,11 @@ static void apple_sep_cpu_moni_jump(CPUState *cpu, run_on_cpu_data data)
             load_addr);
     cpu_set_pc(cpu, data.target_ptr);
 
+    // possible workaround for intermittent sep boot errors
     if (tcg_enabled()) {
         arm_rebuild_hflags(&arm_cpu->env);
+        tlb_flush(cpu);
+        tb_flush(cpu);
     }
 }
 
