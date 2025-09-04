@@ -2737,6 +2737,12 @@ static void t8030_machine_init(MachineState *machine)
     t8030_machine->chip_revision = 0x20;
     dtb_set_prop_u32(child, "chip-revision", t8030_machine->chip_revision);
 
+    dtb_set_prop(child, "clock-frequencies", sizeof(t8030_clock_frequencies),
+                 t8030_clock_frequencies);
+    dtb_set_prop(child, "clock-frequencies-nclk",
+                 sizeof(t8030_clock_frequencies_nclk),
+                 t8030_clock_frequencies_nclk);
+
     prop = dtb_find_prop(child, "ranges");
     g_assert_nonnull(prop);
 
