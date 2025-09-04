@@ -432,10 +432,9 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
 static void apple_sio_handle_endpoint(void *opaque, uint32_t ep, uint64_t msg)
 {
-    AppleSIOState *sio;
+    AppleSIOState *sio = opaque;
     SIOMessage m = { 0 };
 
-    sio = APPLE_SIO(opaque);
     m.raw = msg;
 
     SIO_LOG_MSG(ep, msg);
@@ -591,10 +590,9 @@ static const VMStateDescription vmstate_sio_dma_segment = {
 
 static int vmstate_apple_sio_dma_endpoint_pre_load(void *opaque)
 {
-    AppleSIODMAEndpoint *ep;
+    AppleSIODMAEndpoint *ep = opaque;
     AppleSIOState *s;
 
-    ep = (AppleSIODMAEndpoint *)opaque;
     s = container_of(ep, AppleSIOState, eps[ep->id]);
 
     apple_sio_stop(s, ep);
@@ -605,12 +603,11 @@ static int vmstate_apple_sio_dma_endpoint_pre_load(void *opaque)
 static int vmstate_apple_sio_dma_endpoint_post_load(void *opaque,
                                                     int version_id)
 {
-    AppleSIODMAEndpoint *ep;
+    AppleSIODMAEndpoint *ep = opaque;
     AppleSIOState *s;
     SIODMAMapRequest *req;
     uint64_t bytes_accessed;
 
-    ep = (AppleSIODMAEndpoint *)opaque;
     s = container_of(ep, AppleSIOState, eps[ep->id]);
 
     QTAILQ_FOREACH (req, &ep->requests, next) {

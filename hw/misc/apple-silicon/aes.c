@@ -330,7 +330,7 @@ static bool aes_process_command(AppleAESState *s, AESCommand *cmd)
 
 static void *aes_thread(void *opaque)
 {
-    AppleAESState *s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
     rcu_register_thread();
     while (!s->stopped) {
         AESCommand *cmd = NULL;
@@ -372,9 +372,7 @@ static void aes_security_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t aes_security_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleAESState *s;
-
-    s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
 
 #if 0
     qemu_log_mask(LOG_GUEST_ERROR, "%s: Read 0x" HWADDR_FMT_plx "\n", __func__,
@@ -404,7 +402,7 @@ static uint64_t aes_security_reg_read(void *opaque, hwaddr addr, unsigned size)
 static void aes_reg_write(void *opaque, hwaddr addr, uint64_t data,
                           unsigned size)
 {
-    AppleAESState *s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
     uint32_t orig = data;
     uint32_t index = addr >> 2;
     uint32_t *mmio;
@@ -580,7 +578,7 @@ static void aes_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t aes_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleAESState *s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
     uint32_t val = 0;
     uint32_t *mmio = NULL;
 
@@ -719,7 +717,7 @@ SysBusDevice *apple_aes_create(DTBNode *node, uint32_t board_id)
 
 static int apple_aes_key_post_load(void *opaque, int version_id)
 {
-    AESKey *k = (AESKey *)opaque;
+    AESKey *k = opaque;
     if (k->cipher) {
         qcrypto_cipher_free(k->cipher);
         k->cipher = NULL;
@@ -736,7 +734,7 @@ static int apple_aes_key_post_load(void *opaque, int version_id)
 
 static int apple_aes_pre_save(void *opaque)
 {
-    AppleAESState *s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
     if (!s->stopped) {
         aes_stop(s);
         s->stopped = false;
@@ -746,7 +744,7 @@ static int apple_aes_pre_save(void *opaque)
 
 static int apple_aes_post_load(void *opaque, int version_id)
 {
-    AppleAESState *s = APPLE_AES(opaque);
+    AppleAESState *s = opaque;
     if (!s->stopped) {
         s->stopped = true;
         aes_start(s);

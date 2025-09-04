@@ -129,9 +129,7 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
                                uint16_t seq, void *payload, uint32_t len,
                                void *payload_out, uint32_t out_len)
 {
-    AppleAOPAudioState *s;
-
-    s = APPLE_AOP_AUDIO(opaque);
+    AppleAOPAudioState *s = opaque;
 
     if (type != OP_COMMAND || ldl_le_p(payload) != 0xFFFFFFFF) {
         return AOP_RESULT_ERROR;

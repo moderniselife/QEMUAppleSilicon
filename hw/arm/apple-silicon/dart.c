@@ -166,61 +166,58 @@ struct AppleDARTState {
     uint32_t bypass;
     uint64_t bypass_address;
     uint32_t dart_options;
-    bool dart_dart_force_active_val;
-    bool dart_dart_request_sid_val;
-    bool dart_dart_release_sid_val;
-    bool dart_dart_self_val;
+    bool dart_force_active_val;
+    bool dart_request_sid_val;
+    bool dart_release_sid_val;
+    bool dart_self_val;
 };
 
-static void dart_dart_force_active(void *opaque, int n, int level)
+static void dart_force_active(void *opaque, int n, int level)
 {
-    AppleDARTState *s = APPLE_DART(opaque);
+    AppleDARTState *s = opaque;
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_force_active_val,
-            val);
-    if (s->dart_dart_force_active_val != val) {
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_force_active_val, val);
+    if (s->dart_force_active_val != val) {
         //
     }
-    s->dart_dart_force_active_val = val;
+    s->dart_force_active_val = val;
 }
 
-static void dart_dart_request_sid(void *opaque, int n, int level)
+static void dart_request_sid(void *opaque, int n, int level)
 {
-    AppleDARTState *s = APPLE_DART(opaque);
+    AppleDARTState *s = opaque;
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_request_sid_val,
-            val);
-    if (s->dart_dart_request_sid_val != val) {
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_request_sid_val, val);
+    if (s->dart_request_sid_val != val) {
         //
     }
-    s->dart_dart_request_sid_val = val;
+    s->dart_request_sid_val = val;
 }
 
-static void dart_dart_release_sid(void *opaque, int n, int level)
+static void dart_release_sid(void *opaque, int n, int level)
 {
-    AppleDARTState *s = APPLE_DART(opaque);
+    AppleDARTState *s = opaque;
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_release_sid_val,
-            val);
-    if (s->dart_dart_release_sid_val != val) {
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_release_sid_val, val);
+    if (s->dart_release_sid_val != val) {
         //
     }
-    s->dart_dart_release_sid_val = val;
+    s->dart_release_sid_val = val;
 }
 
-static void dart_dart_self(void *opaque, int n, int level)
+static void dart_self(void *opaque, int n, int level)
 {
-    AppleDARTState *s = APPLE_DART(opaque);
+    AppleDARTState *s = opaque;
     bool val = !!level;
     assert(n == 0);
-    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_dart_self_val, val);
-    if (s->dart_dart_self_val != val) {
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_self_val, val);
+    if (s->dart_self_val != val) {
         //
     }
-    s->dart_dart_self_val = val;
+    s->dart_self_val = val;
 }
 
 static int apple_dart_device_list(Object *obj, void *opaque)
@@ -272,7 +269,7 @@ static void apple_dart_update_irq(AppleDARTState *s)
 static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    AppleDARTInstance *o = (AppleDARTInstance *)opaque;
+    AppleDARTInstance *o = opaque;
     AppleDARTState *s = o->s;
     uint32_t val = data;
     DPRINTF("%s[%d]: (%s) %s @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
@@ -326,7 +323,7 @@ static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleDARTInstance *o = (AppleDARTInstance *)opaque;
+    AppleDARTInstance *o = opaque;
     AppleDARTState *s = o->s;
     DPRINTF("%s[%d]: (%s) %s @ 0x" HWADDR_FMT_plx "\n", o->s->name, o->id,
             dart_instance_name[o->type], __func__, addr);
@@ -544,10 +541,10 @@ static void apple_dart_reset(DeviceState *dev)
         }
     }
 
-    s->dart_dart_force_active_val = 0;
-    s->dart_dart_request_sid_val = 0;
-    s->dart_dart_release_sid_val = 0;
-    s->dart_dart_self_val = 0;
+    s->dart_force_active_val = 0;
+    s->dart_request_sid_val = 0;
+    s->dart_release_sid_val = 0;
+    s->dart_self_val = 0;
 }
 
 static void apple_dart_realize(DeviceState *dev, Error **errp)
@@ -555,10 +552,10 @@ static void apple_dart_realize(DeviceState *dev, Error **errp)
     AppleDARTState *s = APPLE_DART(dev);
 
 #if 0
-        qdev_init_gpio_in_named(DEVICE(s), dart_dart_force_active, DART_DART_FORCE_ACTIVE, 1);
-        qdev_init_gpio_in_named(DEVICE(s), dart_dart_request_sid, DART_DART_REQUEST_SID, 1);
-        qdev_init_gpio_in_named(DEVICE(s), dart_dart_release_sid, DART_DART_RELEASE_SID, 1);
-        qdev_init_gpio_in_named(DEVICE(s), dart_dart_self, DART_DART_SELF, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_force_active, DART_FORCE_ACTIVE, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_request_sid, DART_REQUEST_SID, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_release_sid, DART_RELEASE_SID, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_self, DART_SELF, 1);
 #endif
 }
 

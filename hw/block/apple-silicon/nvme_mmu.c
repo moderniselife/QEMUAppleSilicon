@@ -39,7 +39,7 @@
 static void apple_nvme_mmu_common_reg_write(void *opaque, hwaddr addr,
                                             uint64_t data, unsigned size)
 {
-    AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
+    AppleNVMeMMUState *s = opaque;
     uint32_t *mmio = &s->common_reg[addr >> 2];
     DPRINTF("apple_nvme_mmu: common reg WRITE @ 0x" HWADDR_FMT_plx
             " value: 0x" HWADDR_FMT_plx "\n",
@@ -92,7 +92,7 @@ static void apple_nvme_mmu_common_reg_write(void *opaque, hwaddr addr,
 static uint64_t apple_nvme_mmu_common_reg_read(void *opaque, hwaddr addr,
                                                unsigned size)
 {
-    AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
+    AppleNVMeMMUState *s = opaque;
     uint32_t *mmio = &s->common_reg[addr >> 2];
     uint32_t val = *mmio;
 
@@ -148,7 +148,7 @@ static const MemoryRegionOps apple_nvme_mmu_common_reg_ops = {
 
 static void apple_nvme_mmu_set_irq(void *opaque, int irq_num, int level)
 {
-    AppleNVMeMMUState *s = APPLE_NVME_MMU(opaque);
+    AppleNVMeMMUState *s = opaque;
     // qemu_set_irq(s->irq, level);
     // return;
 

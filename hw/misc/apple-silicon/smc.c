@@ -233,15 +233,13 @@ static uint8_t apple_smc_mbse_write(AppleSMCState *s, SMCKey *key,
 static void apple_smc_handle_key_endpoint(void *opaque, const uint32_t ep,
                                           const uint64_t msg)
 {
-    AppleRTKit *rtk;
-    AppleSMCState *s;
+    AppleRTKit *rtk = opaque;
+    AppleSMCState *s = opaque;
     KeyMessage *kmsg;
     KeyResponse resp;
     SMCKey *key_entry;
     SMCKeyData *data_entry;
 
-    s = APPLE_SMC_IOP(opaque);
-    rtk = APPLE_RTKIT(opaque);
     kmsg = (KeyMessage *)&msg;
 
     kmsg->key = le32_to_cpu(kmsg->key);
@@ -644,13 +642,11 @@ static const VMStateDescription vmstate_apple_smc_key_data = {
 
 static int vmstate_apple_smc_post_load(void *opaque, int version_id)
 {
-    AppleSMCState *s;
+    AppleSMCState *s = opaque;
     SMCKey *key;
     SMCKey *key_next;
     SMCKeyData *data;
     SMCKeyData *data_next;
-
-    s = APPLE_SMC_IOP(opaque);
 
     QTAILQ_FOREACH_SAFE (data, &s->key_data, next, data_next) {
         key = apple_smc_get_key(s, data->key);

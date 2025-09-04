@@ -220,14 +220,14 @@ static void apple_a13_cluster_deliver_ipi(AppleA13Cluster *c, uint64_t cpu_id,
 
 static int apple_a13_cluster_pre_save(void *opaque)
 {
-    AppleA13Cluster *cluster = APPLE_A13_CLUSTER(opaque);
+    AppleA13Cluster *cluster = opaque;
     cluster->ipi_cr = ipi_cr;
     return 0;
 }
 
 static int apple_a13_cluster_post_load(void *opaque, int version_id)
 {
-    AppleA13Cluster *cluster = APPLE_A13_CLUSTER(opaque);
+    AppleA13Cluster *cluster = opaque;
     ipi_cr = cluster->ipi_cr;
     return 0;
 }
@@ -241,7 +241,7 @@ static void apple_a13_cluster_reset(DeviceState *dev)
 
 static int add_cpu_to_cluster(Object *obj, void *opaque)
 {
-    AppleA13Cluster *cluster = APPLE_A13_CLUSTER(opaque);
+    AppleA13Cluster *cluster = opaque;
     CPUState *cpu = (CPUState *)object_dynamic_cast(obj, TYPE_CPU);
     AppleA13State *acpu =
         (AppleA13State *)object_dynamic_cast(obj, TYPE_APPLE_A13);

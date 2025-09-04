@@ -121,7 +121,7 @@ static const MemoryRegionOps iop_autoboot_reg_ops = {
 static void apple_ans_vendor_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                        unsigned size)
 {
-    AppleANSState *s = APPLE_ANS(opaque);
+    AppleANSState *s = opaque;
     uint32_t *mmio = &s->vendor_reg[addr >> 2];
     DPRINTF("ANS2: vendor reg WRITE @ 0x" HWADDR_FMT_plx
             " value: 0x" HWADDR_FMT_plx "\n",
@@ -132,7 +132,7 @@ static void apple_ans_vendor_reg_write(void *opaque, hwaddr addr, uint64_t data,
 static uint64_t apple_ans_vendor_reg_read(void *opaque, hwaddr addr,
                                           unsigned size)
 {
-    AppleANSState *s = APPLE_ANS(opaque);
+    AppleANSState *s = opaque;
     uint32_t *mmio = &s->vendor_reg[addr >> 2];
     uint32_t val = *mmio;
 
@@ -168,7 +168,7 @@ static void apple_ans_set_irq(void *opaque, int irq_num, int level)
 {
     // msi_enabled stays disabled and pci_set_irq doesn't work for ans, maybe
     // because the pci device isn't exposed.
-    AppleANSState *s = APPLE_ANS(opaque);
+    AppleANSState *s = opaque;
     qemu_set_irq(s->irq, level);
 #if 0
     //return;
@@ -190,7 +190,7 @@ static void apple_ans_set_irq(void *opaque, int irq_num, int level)
 
 static void apple_ans_start(void *opaque)
 {
-    AppleANSState *s = APPLE_ANS(opaque);
+    AppleANSState *s = opaque;
     PCIDevice *pci_dev = PCI_DEVICE(s->nvme);
     uint32_t config;
 
@@ -329,7 +329,7 @@ static void apple_ans_reset(DeviceState *qdev)
 
 static int apple_ans_post_load(void *opaque, int version_id)
 {
-    AppleANSState *s = APPLE_ANS(opaque);
+    AppleANSState *s = opaque;
     if (s->started) {
         apple_ans_start(s);
     }

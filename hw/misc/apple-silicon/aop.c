@@ -505,7 +505,7 @@ static MemTxResult apple_aop_ep_recv_packet_locked(
 
 static void apple_aop_ep_handle_message(void *opaque, uint32_t ep, uint64_t msg)
 {
-    AppleAOPEndpoint *s;
+    AppleAOPEndpoint *s = opaque;
     AppleRTKit *rtk;
     MemTxResult ret;
     uint8_t ready_report_buf[READY_REPORT_LEN];
@@ -517,7 +517,6 @@ static void apple_aop_ep_handle_message(void *opaque, uint32_t ep, uint64_t msg)
     uint32_t out_len;
     void *payload_out;
 
-    s = (AppleAOPEndpoint *)opaque;
     rtk = APPLE_RTKIT(s->aop);
 
     AOP_LOG_MSG(ep, msg);
@@ -675,9 +674,7 @@ static void apple_aop_ep_hello_foreach(gpointer data, gpointer user_data)
 
 static void apple_aop_boot_done(void *opaque)
 {
-    AppleAOPState *s;
-
-    s = APPLE_AOP(opaque);
+    AppleAOPState *s = opaque;
 
     g_list_foreach(s->endpoints, apple_aop_ep_hello_foreach, NULL);
 }

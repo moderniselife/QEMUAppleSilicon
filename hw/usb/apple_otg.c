@@ -76,7 +76,7 @@ static void phy_reg_write(void *opaque, hwaddr addr, uint64_t data,
                   " value: 0x" HWADDR_FMT_plx "\n",
                   addr, data);
 
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
     memcpy(s->phy_reg + addr, &data, size);
 }
 
@@ -84,7 +84,7 @@ static uint64_t phy_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     qemu_log_mask(LOG_UNIMP, "OTG: phy reg READ @ 0x" HWADDR_FMT_plx "\n",
                   addr);
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->phy_reg + addr, size);
@@ -103,7 +103,7 @@ static void usbctl_reg_write(void *opaque, hwaddr addr, uint64_t data,
                   "OTG: usbctl reg WRITE @ 0x" HWADDR_FMT_plx
                   " value: 0x" HWADDR_FMT_plx "\n",
                   addr, data);
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
 
     memcpy(s->usbctl_reg + addr, &data, size);
 }
@@ -112,7 +112,7 @@ static uint64_t usbctl_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     qemu_log_mask(LOG_UNIMP, "OTG: usbctl reg READ @ 0x" HWADDR_FMT_plx "\n",
                   addr);
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->usbctl_reg + addr, size);
@@ -127,7 +127,7 @@ static const MemoryRegionOps usbctl_reg_ops = {
 static void widget_reg_write(void *opaque, hwaddr addr, uint64_t data,
                              unsigned size)
 {
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
     uint32_t value = data;
     bool dma_changed = false;
 
@@ -159,7 +159,7 @@ static uint64_t widget_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     qemu_log_mask(LOG_UNIMP, "OTG: widget reg READ @ 0x" HWADDR_FMT_plx "\n",
                   addr);
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->widget_reg + addr, size);
@@ -212,7 +212,7 @@ DeviceState *apple_otg_create(DTBNode *node)
 
 static int apple_otg_post_load(void *opaque, int version_id)
 {
-    AppleOTGState *s = APPLE_OTG(opaque);
+    AppleOTGState *s = opaque;
 
     if (!s->dart) {
         memory_region_set_alias_offset(s->dma_mr, s->high_addr);

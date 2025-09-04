@@ -437,9 +437,7 @@ static void adp_v4_update_disp_image(AppleDisplayPipeV4State *s)
 static void adp_v4_reg_write(void *opaque, hwaddr addr, uint64_t data,
                              unsigned size)
 {
-    AppleDisplayPipeV4State *s;
-
-    s = APPLE_DISPLAY_PIPE_V4(opaque);
+    AppleDisplayPipeV4State *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -477,9 +475,7 @@ static void adp_v4_reg_write(void *opaque, hwaddr addr, uint64_t data,
 static uint64_t adp_v4_reg_read(void *const opaque, const hwaddr addr,
                                 const unsigned size)
 {
-    AppleDisplayPipeV4State *s;
-
-    s = APPLE_DISPLAY_PIPE_V4(opaque);
+    AppleDisplayPipeV4State *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -539,7 +535,7 @@ static void adp_v4_draw_row(void *opaque, uint8_t *dest, const uint8_t *src,
 
 static void adp_v4_invalidate(void *opaque)
 {
-    AppleDisplayPipeV4State *s = APPLE_DISPLAY_PIPE_V4(opaque);
+    AppleDisplayPipeV4State *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -548,7 +544,7 @@ static void adp_v4_invalidate(void *opaque)
 
 static void adp_v4_gfx_update(void *opaque)
 {
-    AppleDisplayPipeV4State *s = APPLE_DISPLAY_PIPE_V4(opaque);
+    AppleDisplayPipeV4State *s = opaque;
     DisplaySurface *surface = qemu_console_surface(s->console);
 
     int stride = s->width * sizeof(uint32_t);
@@ -731,7 +727,7 @@ type_init(adp_v4_register_types);
 // TODO: Where is the destination X and Y?
 static void adp_v4_update_disp_image_bh(void *opaque)
 {
-    AppleDisplayPipeV4State *s;
+    AppleDisplayPipeV4State *s = opaque;
     ADPV4GenPipeState *layer_0_gp;
     ADPV4GenPipeState *layer_1_gp;
     uint8_t layer_0_blend;
@@ -742,8 +738,6 @@ static void adp_v4_update_disp_image_bh(void *opaque)
     pixman_format_code_t layer_1_fmt;
     pixman_image_t *layer_0_img;
     pixman_image_t *layer_1_img;
-
-    s = APPLE_DISPLAY_PIPE_V4(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
 
