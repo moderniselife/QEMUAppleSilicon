@@ -98,10 +98,8 @@ static inline uint32_t sart_get_region_flags(AppleSARTState *s, int region)
 static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    AppleSARTState *s;
+    AppleSARTState *s = opaque;
     IOMMUTLBEvent event;
-
-    s = APPLE_SART(opaque);
 
     DPRINTF("%s: %s @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             DEVICE(s)->id, __func__, addr, data);
@@ -132,9 +130,7 @@ static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSARTState *s;
-
-    s = APPLE_SART(opaque);
+    AppleSARTState *s = opaque;
 
     DPRINTF("%s: %s @ 0x" HWADDR_FMT_plx "\n", DEVICE(s)->id, __func__, addr);
 

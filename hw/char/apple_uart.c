@@ -345,7 +345,7 @@ static void apple_uart_rx_timeout_set(AppleUartState *s)
 static void apple_uart_write(void *opaque, hwaddr offset, uint64_t val,
                              unsigned size)
 {
-    AppleUartState *s = (AppleUartState *)opaque;
+    AppleUartState *s = opaque;
     uint8_t ch;
 
     trace_apple_uart_write(s->channel, offset, apple_uart_regname(offset), val);
@@ -413,7 +413,7 @@ static void apple_uart_write(void *opaque, hwaddr offset, uint64_t val,
 
 static uint64_t apple_uart_read(void *opaque, hwaddr offset, unsigned size)
 {
-    AppleUartState *s = (AppleUartState *)opaque;
+    AppleUartState *s = opaque;
     uint32_t res;
 
     switch (offset) {
@@ -476,7 +476,7 @@ static const MemoryRegionOps apple_uart_ops = {
 
 static int apple_uart_can_receive(void *opaque)
 {
-    AppleUartState *s = (AppleUartState *)opaque;
+    AppleUartState *s = opaque;
 
     if (s->reg[I_(UFCON)] & UFCON_FIFO_ENABLE) {
         return fifo8_num_free(&s->rx);
@@ -487,7 +487,7 @@ static int apple_uart_can_receive(void *opaque)
 
 static void apple_uart_receive(void *opaque, const uint8_t *buf, int size)
 {
-    AppleUartState *s = (AppleUartState *)opaque;
+    AppleUartState *s = opaque;
 
     if (s->reg[I_(UFCON)] & UFCON_FIFO_ENABLE) {
         if (fifo8_num_free(&s->rx) < size) {
@@ -508,7 +508,7 @@ static void apple_uart_receive(void *opaque, const uint8_t *buf, int size)
 
 static void apple_uart_event(void *opaque, QEMUChrEvent event)
 {
-    AppleUartState *s = (AppleUartState *)opaque;
+    AppleUartState *s = opaque;
 
     if (event == CHR_EVENT_BREAK) {
         /* When the RxDn is held in logic 0, then a null byte is pushed into the
@@ -537,7 +537,7 @@ static void apple_uart_reset(DeviceState *dev)
 
 static int apple_uart_post_load(void *opaque, int version_id)
 {
-    AppleUartState *s = APPLE_UART(opaque);
+    AppleUartState *s = opaque;
 
     apple_uart_update_parameters(s);
     apple_uart_rx_timeout_set(s);

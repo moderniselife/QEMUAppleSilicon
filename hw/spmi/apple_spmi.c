@@ -133,7 +133,7 @@ static void apple_spmi_update_irq(AppleSPMIState *s)
 
 static void apple_spmi_set_irq(void *opaque, int irq, int level)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     uint32_t *status = NULL;
     switch (s->reg_vers) {
     case 0:
@@ -166,7 +166,7 @@ static void apple_spmi_update_queues_status(AppleSPMIState *s)
 static void apple_spmi_queue_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                        unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     uint32_t value = data;
     uint32_t *mmio = &s->queue_reg[addr >> 2];
     bool iflg = false;
@@ -265,7 +265,7 @@ static void apple_spmi_queue_reg_write(void *opaque, hwaddr addr, uint64_t data,
 static uint64_t apple_spmi_queue_reg_read(void *opaque, hwaddr addr,
                                           unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     bool qflg = false;
     bool iflg = false;
     uint32_t value = 0;
@@ -322,7 +322,7 @@ static const MemoryRegionOps apple_spmi_queue_reg_ops = {
 static uint64_t apple_spmi_control_read(void *opaque, hwaddr addr,
                                         unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     bool qflg = false;
     bool iflg = false;
     uint32_t value = 0;
@@ -349,7 +349,7 @@ static uint64_t apple_spmi_control_read(void *opaque, hwaddr addr,
 static void apple_spmi_control_write(void *opaque, hwaddr addr, uint64_t data,
                                      unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     uint32_t value = data;
     uint32_t *mmio = &s->control_reg[addr >> 2];
     bool iflg = false;
@@ -394,7 +394,7 @@ static const MemoryRegionOps apple_spmi_control_ops = {
 
 static uint64_t apple_spmi_fault_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     bool qflg = false;
     bool iflg = false;
     uint32_t value = 0;
@@ -426,7 +426,7 @@ static uint64_t apple_spmi_fault_read(void *opaque, hwaddr addr, unsigned size)
 static void apple_spmi_fault_write(void *opaque, hwaddr addr, uint64_t data,
                                    unsigned size)
 {
-    AppleSPMIState *s = APPLE_SPMI(opaque);
+    AppleSPMIState *s = opaque;
     uint32_t value = data;
     uint32_t *mmio = &s->fault_reg[addr >> 2];
     bool iflg = false;

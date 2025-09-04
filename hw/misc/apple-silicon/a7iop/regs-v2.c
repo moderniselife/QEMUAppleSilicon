@@ -61,10 +61,10 @@
 
 #define IOP_MAILBOX_REG_BASE (0xB80)
 
-static void apple_a7iop_reg_write(void *opaque, hwaddr addr,
-                                  const uint64_t data, unsigned size)
+static void apple_a7iop_v2_reg_write(void *opaque, hwaddr addr,
+                                     const uint64_t data, unsigned size)
 {
-    AppleA7IOP *s = APPLE_A7IOP(opaque);
+    AppleA7IOP *s = opaque;
 
     switch (addr) {
     case REG_CPU_CTRL:
@@ -82,9 +82,10 @@ static void apple_a7iop_reg_write(void *opaque, hwaddr addr,
     }
 }
 
-static uint64_t apple_a7iop_reg_read(void *opaque, hwaddr addr, unsigned size)
+static uint64_t apple_a7iop_v2_reg_read(void *opaque, hwaddr addr,
+                                        unsigned size)
 {
-    AppleA7IOP *s = APPLE_A7IOP(opaque);
+    AppleA7IOP *s = opaque;
     uint64_t ret = 0;
 
     switch (addr) {
@@ -102,9 +103,9 @@ static uint64_t apple_a7iop_reg_read(void *opaque, hwaddr addr, unsigned size)
     return ret;
 }
 
-static const MemoryRegionOps apple_a7iop_reg_ops = {
-    .write = apple_a7iop_reg_write,
-    .read = apple_a7iop_reg_read,
+static const MemoryRegionOps apple_a7iop_v2_reg_ops = {
+    .write = apple_a7iop_v2_reg_write,
+    .read = apple_a7iop_v2_reg_read,
     .endianness = DEVICE_NATIVE_ENDIAN,
     .valid.min_access_size = 4,
     .valid.max_access_size = 8,
@@ -120,7 +121,7 @@ void apple_a7iop_init_mmio_v2(AppleA7IOP *s, uint64_t mmio_size)
 
     sbd = SYS_BUS_DEVICE(s);
     snprintf(name, sizeof(name), TYPE_APPLE_A7IOP ".%s.regs", s->role);
-    memory_region_init_io(&s->mmio, OBJECT(s), &apple_a7iop_reg_ops, s, name,
+    memory_region_init_io(&s->mmio, OBJECT(s), &apple_a7iop_v2_reg_ops, s, name,
                           mmio_size);
     sysbus_init_mmio(sbd, &s->mmio);
 

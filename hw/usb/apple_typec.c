@@ -55,7 +55,7 @@ static void phy_reg_write(void *opaque, hwaddr addr, uint64_t data,
     // qemu_log_mask(LOG_UNIMP, "ATC: phy reg WRITE @ 0x" HWADDR_FMT_plx "
     // value: 0x" HWADDR_FMT_plx "\n", addr, data);
 
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     memcpy(s->phy_reg + addr, &data, size);
 }
 
@@ -63,7 +63,7 @@ static uint64_t phy_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     // qemu_log_mask(LOG_UNIMP, "ATC: phy reg READ @ 0x" HWADDR_FMT_plx "\n",
     // addr);
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->phy_reg + addr, size);
@@ -81,7 +81,7 @@ static void config_reg_write(void *opaque, hwaddr addr, uint64_t data,
     // qemu_log_mask(LOG_UNIMP, "ATC: config reg WRITE @ 0x" HWADDR_FMT_plx "
     // value: 0x" HWADDR_FMT_plx "\n", addr, data); arm_cpu_backtrace();
 
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     memcpy(s->config_reg + addr, &data, size);
 }
 
@@ -89,7 +89,7 @@ static uint64_t config_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     // qemu_log_mask(LOG_UNIMP, "ATC: config reg READ @ 0x" HWADDR_FMT_plx "\n",
     // addr); arm_cpu_backtrace();
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->config_reg + addr, size);
@@ -146,7 +146,7 @@ static void apple_typec_init(Object *obj)
 
 static int apple_typec_post_load(void *opaque, int version_id)
 {
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     return 0;
 }
 

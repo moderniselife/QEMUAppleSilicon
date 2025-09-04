@@ -100,7 +100,7 @@ static void apple_spmi_pmu_update_irq(AppleSPMIPMUState *s)
 
 static void apple_spmi_pmu_alarm(void *opaque)
 {
-    AppleSPMIPMUState *s = APPLE_SPMI_PMU(opaque);
+    AppleSPMIPMUState *s = opaque;
     WREG32_OR(s->reg_alarm_event, RTC_EVENT_ALARM);
     apple_spmi_pmu_update_irq(s);
     qemu_system_wakeup_request(QEMU_WAKEUP_REASON_RTC, NULL);

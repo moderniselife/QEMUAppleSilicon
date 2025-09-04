@@ -841,9 +841,7 @@ static void apple_mt_spi_send_path_update(AppleMTSPIState *s,
 
 static void touch_timer_tick(void *opaque)
 {
-    AppleMTSPIState *s;
-
-    s = APPLE_MT_SPI(opaque);
+    AppleMTSPIState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -859,9 +857,7 @@ static void touch_timer_tick(void *opaque)
 
 static void touch_end_timer_tick(void *opaque)
 {
-    AppleMTSPIState *s;
-
-    s = APPLE_MT_SPI(opaque);
+    AppleMTSPIState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -875,9 +871,7 @@ static void touch_end_timer_tick(void *opaque)
 static void apple_mt_spi_mouse_event(void *opaque, int dx, int dy, int dz,
                                      int buttons_state)
 {
-    AppleMTSPIState *s;
-
-    s = APPLE_MT_SPI(opaque);
+    AppleMTSPIState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 

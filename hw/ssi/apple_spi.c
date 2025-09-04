@@ -202,7 +202,7 @@ static void apple_spi_update_cs(AppleSPIState *s)
 
 static void apple_spi_cs_set(void *opaque, int pin, int level)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     if (level) {
         REG(s, REG_PIN) |= REG_PIN_CS;
     } else {
@@ -295,7 +295,7 @@ static void apple_spi_run(AppleSPIState *s)
 static void apple_spi_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     uint32_t r = data;
     uint32_t *mmio = &REG(s, addr);
     uint32_t old = *mmio;
@@ -363,7 +363,7 @@ static void apple_spi_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_spi_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     uint32_t r;
     bool run = false;
 

@@ -580,8 +580,8 @@ static const MemoryRegionOps pmgr_unk_reg_ops = {
 static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    MachineState *machine = MACHINE(opaque);
-    S8000MachineState *s8000_machine = S8000_MACHINE(opaque);
+    MachineState *machine = opaque;
+    S8000MachineState *s8000_machine = opaque;
     uint32_t value = data;
 
 #if 0
@@ -609,7 +609,7 @@ static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pmgr_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    S8000MachineState *s8000_machine = S8000_MACHINE(opaque);
+    S8000MachineState *s8000_machine = opaque;
     uint64_t result = 0;
 
     memcpy(&result, s8000_machine->pmgr_reg + addr, size);

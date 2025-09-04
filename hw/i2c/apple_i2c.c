@@ -106,8 +106,8 @@ static void apple_i2c_update_irq(AppleI2CState *s)
 static void apple_i2c_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleI2CState *s = APPLE_I2C(opaque);
-    DeviceState *dev = DEVICE(opaque);
+    AppleI2CState *s = opaque;
+    DeviceState *dev = DEVICE(s);
 #ifdef DEBUG_APPLE_I2C
     qemu_log_mask(LOG_UNIMP,
                   "%s: reg WRITE @ 0x" HWADDR_FMT_plx
@@ -206,7 +206,7 @@ static void apple_i2c_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_i2c_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleI2CState *s = APPLE_I2C(opaque);
+    AppleI2CState *s = opaque;
     uint32_t *mmio = (uint32_t *)&s->reg[addr];
     uint32_t value = *mmio;
 

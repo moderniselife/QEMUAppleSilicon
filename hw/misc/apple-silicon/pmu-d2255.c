@@ -225,9 +225,8 @@ static void pmu_d2255_update_irq(PMUD2255State *s)
 
 static void pmu_d2255_alarm(void *opaque)
 {
-    PMUD2255State *s;
+    PMUD2255State *s = opaque;
 
-    s = PMU_D2255(opaque);
     WREG32_OR(REG_EVENT_C, RTC_EVENT_ALARM);
     pmu_d2255_update_irq(s);
     qemu_system_wakeup_request(QEMU_WAKEUP_REASON_RTC, NULL);

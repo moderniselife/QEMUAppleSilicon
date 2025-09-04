@@ -884,7 +884,7 @@ static const MemoryRegionOps pmgr_unk_reg_ops = {
 static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    T8030MachineState *t8030_machine = T8030_MACHINE(opaque);
+    T8030MachineState *t8030_machine = opaque;
     AppleSEPState *sep;
     uint32_t value = data;
 
@@ -923,7 +923,7 @@ static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pmgr_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    T8030MachineState *t8030_machine = T8030_MACHINE(opaque);
+    T8030MachineState *t8030_machine = opaque;
     uint64_t result = 0;
     switch (addr) {
     case 0xF0010: // AppleT8030PMGR::commonSramCheck
@@ -950,7 +950,7 @@ static const MemoryRegionOps pmgr_reg_ops = {
 static void amcc_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    T8030MachineState *t8030_machine = T8030_MACHINE(opaque);
+    T8030MachineState *t8030_machine = opaque;
     uint32_t value = data;
 
     memcpy(t8030_machine->amcc_reg + addr, &value, size);
@@ -958,7 +958,7 @@ static void amcc_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t amcc_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    T8030MachineState *t8030_machine = T8030_MACHINE(opaque);
+    T8030MachineState *t8030_machine = opaque;
     uint64_t result = 0;
     uint64_t base = t8030_machine->boot_info.top_of_kernel_data_pa - DRAM_BASE;
     uint64_t amcc_size = 0xf000000;

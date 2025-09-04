@@ -168,7 +168,7 @@ static void apple_aic_update(AppleAICState *s)
 
 static void apple_aic_set_irq(void *opaque, int irq, int level)
 {
-    AppleAICState *s = APPLE_AIC(opaque);
+    AppleAICState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->mutex);
 
@@ -182,7 +182,7 @@ static void apple_aic_set_irq(void *opaque, int irq, int level)
 
 static void apple_aic_tick(void *opaque)
 {
-    AppleAICState *s = APPLE_AIC(opaque);
+    AppleAICState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->mutex);
 
@@ -213,8 +213,8 @@ static void apple_aic_reset(DeviceState *dev)
 static void apple_aic_write(void *opaque, hwaddr addr, uint64_t data,
                             unsigned size)
 {
-    AppleAICCPU *o = (AppleAICCPU *)opaque;
-    AppleAICState *s = APPLE_AIC(o->aic);
+    AppleAICCPU *o = opaque;
+    AppleAICState *s = o->aic;
     uint32_t val = (uint32_t)data;
 
     QEMU_LOCK_GUARD(&s->mutex);
@@ -358,8 +358,8 @@ static void apple_aic_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_aic_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleAICCPU *o = (AppleAICCPU *)opaque;
-    AppleAICState *s = APPLE_AIC(o->aic);
+    AppleAICCPU *o = opaque;
+    AppleAICState *s = o->aic;
 
     QEMU_LOCK_GUARD(&s->mutex);
 

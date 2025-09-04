@@ -427,7 +427,7 @@ static const char *sepos_return_module_thread_string(uint32_t chip_id,
 static void debug_trace_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                   unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint32_t offset = 0;
     if (size == 1) {
         // iOS 15 SEPFW workaround against a brief logspam
@@ -807,7 +807,7 @@ static void debug_trace_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t debug_trace_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -900,7 +900,7 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
 {
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep;
-    AppleTRNGState *s;
+    AppleTRNGState *s = opaque;
     uint32_t enabled;
 
     sep = APPLE_SEP(
@@ -909,8 +909,6 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
-
-    s = (AppleTRNGState *)opaque;
 
 #if 0
     DPRINTF(
@@ -1031,7 +1029,7 @@ static uint64_t trng_regs_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep;
-    AppleTRNGState *s;
+    AppleTRNGState *s = opaque;
     uint64_t ret = 0;
 
     sep = APPLE_SEP(
@@ -1040,8 +1038,6 @@ static uint64_t trng_regs_reg_read(void *opaque, hwaddr addr, unsigned size)
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
-
-    s = (AppleTRNGState *)opaque;
 
     uint32_t enabled = (s->config & TRNG_CONTROL_ENABLED) != 0;
     switch (addr) {
@@ -1143,7 +1139,7 @@ const char *sepos_powerstate_name(uint64_t powerstate_offset)
 static void pmgr_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1234,7 +1230,7 @@ static void pmgr_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pmgr_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1289,7 +1285,7 @@ static const MemoryRegionOps pmgr_base_reg_ops = {
 static void key_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1334,7 +1330,7 @@ static void key_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t key_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1367,7 +1363,7 @@ static const MemoryRegionOps key_base_reg_ops = {
 static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     AppleA7IOP *a7iop = APPLE_A7IOP(s);
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1459,7 +1455,7 @@ static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t key_fcfg_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
     uint8_t key_fcfg_offset_0x14_index = 0;
     uint8_t key_fcfg_offset_0x14_index_limit = 0;
@@ -1519,7 +1515,7 @@ static const MemoryRegionOps key_fcfg_reg_ops = {
 static void moni_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1537,7 +1533,7 @@ static void moni_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t moni_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1570,7 +1566,7 @@ static const MemoryRegionOps moni_base_reg_ops = {
 static void moni_thrm_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1588,7 +1584,7 @@ static void moni_thrm_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t moni_thrm_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1621,7 +1617,7 @@ static const MemoryRegionOps moni_thrm_reg_ops = {
 static void eisp_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1639,7 +1635,7 @@ static void eisp_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t eisp_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -1678,7 +1674,7 @@ static const MemoryRegionOps eisp_base_reg_ops = {
 static void eisp_hmac_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1696,7 +1692,7 @@ static void eisp_hmac_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t eisp_hmac_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2161,8 +2157,7 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep = APPLE_SEP(
         object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    AppleAESSState *s;
-    s = (AppleAESSState *)opaque;
+    AppleAESSState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
@@ -2242,8 +2237,7 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep = APPLE_SEP(
         object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    AppleAESSState *s;
-    s = (AppleAESSState *)opaque;
+    AppleAESSState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2327,7 +2321,7 @@ static const MemoryRegionOps aess_base_reg_ops = {
 static void aesh_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -2348,7 +2342,7 @@ static void aesh_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t aesh_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2391,8 +2385,7 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep = APPLE_SEP(
         object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    ApplePKAState *s;
-    s = (ApplePKAState *)opaque;
+    ApplePKAState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
@@ -2481,8 +2474,7 @@ static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     MachineState *machine = MACHINE(qdev_get_machine());
     AppleSEPState *sep = APPLE_SEP(
         object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    ApplePKAState *s;
-    s = (ApplePKAState *)opaque;
+    ApplePKAState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2551,7 +2543,7 @@ static const MemoryRegionOps pka_base_reg_ops = {
 static void pka_tmm_reg_write(void *opaque, hwaddr addr, uint64_t data,
                               unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -2575,7 +2567,7 @@ static void pka_tmm_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pka_tmm_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2614,7 +2606,7 @@ static const MemoryRegionOps pka_tmm_reg_ops = {
 static void misc2_reg_write(void *opaque, hwaddr addr, uint64_t data,
                             unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -2633,7 +2625,7 @@ static void misc2_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t misc2_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2667,7 +2659,7 @@ static const MemoryRegionOps misc2_reg_ops = {
 static void boot_monitor_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                    unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -2703,7 +2695,7 @@ static void boot_monitor_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t boot_monitor_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2962,7 +2954,7 @@ static void apple_sep_send_message(AppleSEPState *s, uint8_t ep, uint8_t tag,
 static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     SEPMessage sep_msg = { 0 };
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -3201,7 +3193,7 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t progress_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSEPState *s = APPLE_SEP(opaque);
+    AppleSEPState *s = opaque;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE

@@ -63,7 +63,7 @@ struct AppleDisplayPipeV2State {
 static void frontend_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    AppleDisplayPipeV2State *s = APPLE_DISPLAY_PIPE_V2(opaque);
+    AppleDisplayPipeV2State *s = opaque;
 
     switch (addr) {
     default:
@@ -76,7 +76,7 @@ static void frontend_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t frontend_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleDisplayPipeV2State *s = APPLE_DISPLAY_PIPE_V2(opaque);
+    AppleDisplayPipeV2State *s = opaque;
 
     switch (addr) {
     case REG_SPDS_VERSION:
@@ -103,7 +103,7 @@ static const MemoryRegionOps frontend_reg_ops = {
 static void backend_write(void *opaque, hwaddr addr, uint64_t data,
                           unsigned size)
 {
-    AppleDisplayPipeV2State *s = APPLE_DISPLAY_PIPE_V2(opaque);
+    AppleDisplayPipeV2State *s = opaque;
 
     switch (addr) {
     case REG_DBE_VFTG_CTRL:
@@ -136,7 +136,7 @@ static void backend_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t backend_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleDisplayPipeV2State *s = APPLE_DISPLAY_PIPE_V2(opaque);
+    AppleDisplayPipeV2State *s = opaque;
 
     switch (addr) {
     case REG_DBE_VFTG_CTRL:
@@ -232,7 +232,7 @@ static void adp_v2_draw_row(void *opaque, uint8_t *dest, const uint8_t *src,
 
 static void adp_v2_gfx_update(void *opaque)
 {
-    AppleDisplayPipeV2State *s = APPLE_DISPLAY_PIPE_V2(opaque);
+    AppleDisplayPipeV2State *s = opaque;
     DisplaySurface *surface = qemu_console_surface(s->console);
 
     int stride = s->width * sizeof(uint32_t);

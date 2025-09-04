@@ -30,6 +30,12 @@
     } while (0)
 #endif
 
+// AOP Audio Devices
+// - mcaN | Multi-Channel Audio (cluster N)
+// - apac | AOP Audio Codec?
+// - acmm | Audio Codec Mclk Manager?
+// - lpai | Low Power Audio Input
+
 #define OP_COMMAND (0x20)
 
 #define COMMAND_GET_DEVICE_ID (0xC3000001)
@@ -129,9 +135,7 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
                                uint16_t seq, void *payload, uint32_t len,
                                void *payload_out, uint32_t out_len)
 {
-    AppleAOPAudioState *s;
-
-    s = APPLE_AOP_AUDIO(opaque);
+    AppleAOPAudioState *s = opaque;
 
     if (type != OP_COMMAND || ldl_le_p(payload) != 0xFFFFFFFF) {
         return AOP_RESULT_ERROR;
@@ -213,6 +217,7 @@ apple_aop_audio_handle_command(void *opaque, uint32_t type, uint8_t category,
             }
             break;
         case 'acmm':
+        case 'apac':
             switch (ldl_le_p(payload + COMMAND_HDR_LEN + 4)) {
             case DEV_PROP_STATE:
                 stl_le_p(payload_out, DEV_PROP_STATE_LEN);

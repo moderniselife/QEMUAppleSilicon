@@ -91,8 +91,8 @@ static inline void apple_rtkit_register_ep(AppleRTKit *s, uint32_t ep,
 {
     AppleRTKitEPData *data;
 
-    g_assert_nonnull(opaque);
     g_assert_null(g_tree_lookup(s->endpoints, GUINT_TO_POINTER(ep)));
+
     data = g_new0(AppleRTKitEPData, 1);
     data->opaque = opaque;
     data->handler = handler;
@@ -225,13 +225,11 @@ static void apple_rtkit_rollcall_v11(AppleRTKit *s)
 static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
                                         uint64_t message)
 {
-    AppleRTKit *s;
-    AppleA7IOP *a7iop;
+    AppleRTKit *s = opaque;
+    AppleA7IOP *a7iop = opaque;
     AppleRTKitManagementMessage *msg;
     AppleRTKitManagementMessage m = { 0 };
 
-    s = APPLE_RTKIT(opaque);
-    a7iop = APPLE_A7IOP(opaque);
     msg = (AppleRTKitManagementMessage *)&message;
 
     trace_apple_rtkit_handle_mgmt_msg(a7iop->role, msg->raw, s->ep0_status,
@@ -368,14 +366,11 @@ static void apple_rtkit_iop_wakeup(AppleA7IOP *s)
 
 static void apple_rtkit_bh(void *opaque)
 {
-    AppleRTKit *s;
-    AppleA7IOP *a7iop;
+    AppleRTKit *s = opaque;
+    AppleA7IOP *a7iop = opaque;
     AppleRTKitEPData *data;
     AppleA7IOPMessage *msg;
     AppleRTKitMessage *rtk_msg;
-
-    s = APPLE_RTKIT(opaque);
-    a7iop = APPLE_A7IOP(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
     while (!apple_a7iop_mailbox_is_empty(a7iop->iop_mailbox)) {

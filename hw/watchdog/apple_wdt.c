@@ -92,7 +92,7 @@ static inline uint32_t wdt_get_sys_timer(AppleWDTState *s)
 
 static void wdt_update(void *opaque)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint64_t expiry = 0xffffffff;
     uint32_t chip_tmr = wdt_get_chip_timer(s);
     uint32_t sys_tmr = wdt_get_sys_timer(s);
@@ -139,7 +139,7 @@ static void wdt_update(void *opaque)
 static void wdt_reg_write(void *opaque, hwaddr addr, uint64_t data,
                           unsigned size)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint32_t index = addr >> 2;
     uint32_t *mmio;
     uint32_t old;
@@ -182,7 +182,7 @@ static void wdt_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t wdt_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint32_t val = 0;
     uint32_t *mmio = NULL;
 

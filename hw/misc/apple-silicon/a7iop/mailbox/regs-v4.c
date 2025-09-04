@@ -61,13 +61,11 @@
 #define REG_AP_RECV2 (0x738)
 #define REG_AP_RECV3 (0x73C)
 
-static void apple_a7iop_mailbox_reg_write_v4(void *opaque, hwaddr addr,
+static void apple_a7iop_v4_mailbox_reg_write(void *opaque, hwaddr addr,
                                              const uint64_t data, unsigned size)
 {
-    AppleA7IOPMailbox *s;
+    AppleA7IOPMailbox *s = opaque;
     AppleA7IOPMessage *msg;
-
-    s = APPLE_A7IOP_MAILBOX(opaque);
 
     switch (addr) {
     case REG_INT_MASK_SET:
@@ -125,14 +123,12 @@ static void apple_a7iop_mailbox_reg_write_v4(void *opaque, hwaddr addr,
     }
 }
 
-static uint64_t apple_a7iop_mailbox_reg_read_v4(void *opaque, hwaddr addr,
+static uint64_t apple_a7iop_v4_mailbox_reg_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
-    AppleA7IOPMailbox *s;
+    AppleA7IOPMailbox *s = opaque;
     AppleA7IOPMessage *msg;
     uint64_t ret = 0;
-
-    s = APPLE_A7IOP_MAILBOX(opaque);
 
     switch (addr) {
     case REG_INT_MASK_SET:
@@ -194,9 +190,9 @@ static uint64_t apple_a7iop_mailbox_reg_read_v4(void *opaque, hwaddr addr,
     return ret;
 }
 
-static const MemoryRegionOps apple_a7iop_mailbox_reg_ops_v4 = {
-    .write = apple_a7iop_mailbox_reg_write_v4,
-    .read = apple_a7iop_mailbox_reg_read_v4,
+static const MemoryRegionOps apple_a7iop_v4_mailbox_reg_ops = {
+    .write = apple_a7iop_v4_mailbox_reg_write,
+    .read = apple_a7iop_v4_mailbox_reg_read,
     .endianness = DEVICE_NATIVE_ENDIAN,
     .valid.min_access_size = 4,
     .valid.max_access_size = 8,
@@ -207,6 +203,6 @@ static const MemoryRegionOps apple_a7iop_mailbox_reg_ops_v4 = {
 
 void apple_a7iop_mailbox_init_mmio_v4(AppleA7IOPMailbox *s, const char *name)
 {
-    memory_region_init_io(&s->mmio, OBJECT(s), &apple_a7iop_mailbox_reg_ops_v4,
+    memory_region_init_io(&s->mmio, OBJECT(s), &apple_a7iop_v4_mailbox_reg_ops,
                           s, name, REG_AP_RECV3 + 4);
 }

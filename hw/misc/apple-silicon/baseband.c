@@ -164,7 +164,7 @@ struct AppleBasebandState {
 #if 0
 static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 {
-    AppleBasebandState *s = APPLE_BASEBAND(opaque);
+    AppleBasebandState *s = opaque;
     DPRINTF("%s: before first qemu_set_irq: host->irqs[irq_num]: %p ; irq_num: "
             "%d/0x%x ; level: %d\n",
             __func__, s->irq, irq_num, irq_num, level);
@@ -178,7 +178,7 @@ static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 #if 1
 static void apple_baseband_set_irq(void *opaque, int irq_num, int level)
 {
-    AppleBasebandState *s = APPLE_BASEBAND(opaque);
+    AppleBasebandState *s = opaque;
     ApplePCIEPort *port = s->device->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
@@ -261,7 +261,7 @@ static void apple_baseband_raise_msi(AppleBasebandDeviceState *s,
 
 static void baseband_gpio_coredump(void *opaque, int n, int level)
 {
-    AppleBasebandState *s = APPLE_BASEBAND(opaque);
+    AppleBasebandState *s = opaque;
     AppleBasebandDeviceState *s_device = s->device;
     bool coredump = !!level;
     assert(n == 0);
@@ -464,7 +464,7 @@ apple_baseband_device_update_image_doorbell(AppleBasebandDeviceState *s)
 static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
     ApplePCIEPort *port = s->port;
     ApplePCIEHost *host = port->host;
     ApplePCIEState *pcie = host->pcie;
@@ -506,7 +506,7 @@ static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
 static uint64_t apple_baseband_device_bar0_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
     uint32_t val = 0x0;
 
     switch (addr) {
@@ -534,7 +534,7 @@ static const MemoryRegionOps bar0_ops = {
 static void apple_baseband_device_bar1_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -585,7 +585,7 @@ typedef struct QEMU_PACKED custom_baseband0_t {
 static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
     ApplePCIEPort *port = s->port;
     // uint32_t *mmio = &s->vendor_reg[addr >> 2];
     // uint32_t val = *mmio;
@@ -663,7 +663,7 @@ static const MemoryRegionOps bar1_ops = {
 static void apple_baseband_device_bar2_write(void *opaque, hwaddr addr,
                                              uint64_t data, unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -676,7 +676,7 @@ static void apple_baseband_device_bar2_write(void *opaque, hwaddr addr,
 static uint64_t apple_baseband_device_bar2_read(void *opaque, hwaddr addr,
                                                 unsigned size)
 {
-    AppleBasebandDeviceState *s = APPLE_BASEBAND_DEVICE(opaque);
+    AppleBasebandDeviceState *s = opaque;
     uint32_t val = 0x0;
 
     switch (addr) {
@@ -1291,7 +1291,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 #if 1
     memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
                        APPLE_BASEBAND_DEVICE_BAR0_SIZE +
-                       APPLE_BASEBAND_DEVICE_BAR1_SIZE);
+                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
 #endif
 #if 0
     memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
@@ -1330,7 +1330,7 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 #endif
     memory_region_add_subregion(get_system_memory(),
                                 APCIE_ROOT_COMMON_ADDRESS +
-                                BASEBAND_BAR_SUB_ADDR + 0x0000,
+                                    BASEBAND_BAR_SUB_ADDR + 0x0000,
                                 &s->container);
     s->image_ptr = NULL;
     // setting msi_trigger doesn't work here

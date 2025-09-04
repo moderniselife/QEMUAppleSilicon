@@ -144,7 +144,7 @@ static void apple_gpio_update_pincfg(AppleGPIOState *s, int pin, uint32_t value)
 
 static void apple_gpio_set(void *opaque, int pin, int level)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
     int grp;
     int irqgrp = -1;
 
@@ -332,7 +332,7 @@ static uint32_t apple_gpio_int_read(AppleGPIOState *s, unsigned int group,
 static void apple_gpio_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                  unsigned size)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
 
     DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " data 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -365,7 +365,7 @@ static void apple_gpio_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_gpio_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
 
     DPRINTF("%s: READ 0x" HWADDR_FMT_plx "\n", __func__, addr);
 
