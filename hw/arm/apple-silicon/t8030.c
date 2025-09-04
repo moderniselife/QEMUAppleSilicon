@@ -2345,9 +2345,6 @@ static void t8030_create_mt_spi(T8030MachineState *t8030_machine)
     child = dtb_get_node(t8030_machine->device_tree, "arm-io/spi1/multi-touch");
     g_assert_nonnull(child);
 
-    dtb_set_prop(child, "multi-touch-calibration", sizeof(t8030_mt_cal_data),
-                 t8030_mt_cal_data);
-
     dtb_set_prop_null(child, "function-power_ana");
 
     prop = dtb_find_prop(child, "interrupts");
@@ -2739,9 +2736,6 @@ static void t8030_machine_init(MachineState *machine)
 
     t8030_machine->chip_revision = 0x20;
     dtb_set_prop_u32(child, "chip-revision", t8030_machine->chip_revision);
-
-    dtb_set_prop(child, "clock-frequencies", sizeof(t8030_clock_freq),
-                 t8030_clock_freq);
 
     prop = dtb_find_prop(child, "ranges");
     g_assert_nonnull(prop);
