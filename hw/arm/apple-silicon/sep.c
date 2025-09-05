@@ -898,14 +898,10 @@ static const MemoryRegionOps debug_trace_reg_ops = {
 static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep;
     AppleTRNGState *s = opaque;
+    AppleSEPState *sep = s->sep;
     uint32_t enabled;
 
-    sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    AppleA7IOP *a7iop = APPLE_A7IOP(sep);
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
@@ -951,7 +947,7 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
         enabled = (data & TRNG_CONTROL_ENABLED) != 0;
 
         if (!old_enabled && enabled) {
-            apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
+            apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
                                               0x10003); // TRNG
         }
         break;
@@ -1027,14 +1023,10 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t trng_regs_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep;
     AppleTRNGState *s = opaque;
+    AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
 
-    sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
-    AppleA7IOP *a7iop = APPLE_A7IOP(sep);
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
@@ -1054,7 +1046,7 @@ static uint64_t trng_regs_reg_read(void *opaque, hwaddr addr, unsigned size)
     case REG_TRNG_CONTROL:
         ret = s->config;
         if (enabled) {
-            apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
+            apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
                                               0x10003); // TRNG
         }
         break;
@@ -1360,6 +1352,63 @@ static const MemoryRegionOps key_base_reg_ops = {
 };
 
 
+static void key_fkey_reg_write(void *opaque, hwaddr addr, uint64_t data,
+                               unsigned size)
+{
+    AppleSEPState *s = opaque;
+    AppleA7IOP *a7iop = APPLE_A7IOP(s);
+
+#ifdef ENABLE_CPU_DUMP_STATE
+    cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
+#endif
+    switch (addr) {
+    default:
+    jump_default:
+        memcpy(&s->key_fkey_regs[addr], &data, size);
+#if 0
+        DPRINTF(
+                      "SEP KEY_FKEY: Unknown write at 0x" HWADDR_FMT_plx
+                      " with value 0x%" PRIX64 "\n",
+                      addr, data);
+#endif
+        break;
+    }
+}
+
+static uint64_t key_fkey_reg_read(void *opaque, hwaddr addr, unsigned size)
+{
+    AppleSEPState *s = opaque;
+    uint64_t ret = 0;
+    uint8_t key_fkey_offset_0x14_index = 0;
+    uint8_t key_fkey_offset_0x14_index_limit = 0;
+
+#ifdef ENABLE_CPU_DUMP_STATE
+    cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
+#endif
+    switch (addr) {
+    default:
+        memcpy(&ret, &s->key_fkey_regs[addr], size);
+        DPRINTF("SEP KEY_FKEY: Unknown read at 0x" HWADDR_FMT_plx
+                " ret: 0x%" PRIX64 "\n",
+                addr, ret);
+        break;
+    }
+
+    return ret;
+}
+
+static const MemoryRegionOps key_fkey_reg_ops = {
+    .write = key_fkey_reg_write,
+    .read = key_fkey_reg_read,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+    .valid.min_access_size = 4,
+    .valid.max_access_size = 4,
+    .impl.min_access_size = 4,
+    .impl.max_access_size = 4,
+    .valid.unaligned = false,
+};
+
+
 static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
@@ -1383,7 +1432,6 @@ static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
             //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40002);
             //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40003);
             MachineState *machine = MACHINE(qdev_get_machine());
-            T8030MachineState *tms = T8030_MACHINE(machine);
             DeviceState *gpio = NULL;
             gpio = DEVICE(object_property_get_link(OBJECT(machine), "sep_gpio", &error_fatal));
             qemu_set_irq(qdev_get_gpio_in(gpio, 0), true);
@@ -1750,9 +1798,7 @@ static void xor_32bit_value(uint8_t *dest, uint32_t val, int size)
 
 static void aess_raise_interrupt(AppleAESSState *s)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
+    AppleSEPState *sep = s->sep;
     // bit1==interrupts_enabled; bit0==interrupt_will_activate ?
     if ((s->interrupt_enabled & 0x3) == 0x3) {
         s->interrupt_status |= 0x1;
@@ -2154,10 +2200,8 @@ jump_return:
 static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
     AppleAESSState *s = opaque;
+    AppleSEPState *sep = s->sep;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
@@ -2234,10 +2278,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
     AppleAESSState *s = opaque;
+    AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -2379,13 +2421,66 @@ static const MemoryRegionOps aesh_base_reg_ops = {
     .valid.unaligned = false,
 };
 
+static void aesc_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
+                                unsigned size)
+{
+    AppleSEPState *s = opaque;
+
+#ifdef ENABLE_CPU_DUMP_STATE
+    cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
+#endif
+    switch (addr) {
+    default:
+        memcpy(&s->aesc_base_regs[addr], &data, size);
+#if 0
+        qemu_log_mask(LOG_UNIMP,
+                      "SEP AESC_BASE: Unknown write at 0x" HWADDR_FMT_plx
+                      " with value 0x%" PRIX64 "\n",
+                      addr, data);
+#endif
+        break;
+    }
+}
+
+static uint64_t aesc_base_reg_read(void *opaque, hwaddr addr, unsigned size)
+{
+    AppleSEPState *s = opaque;
+    uint64_t ret = 0;
+
+#ifdef ENABLE_CPU_DUMP_STATE
+    cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
+#endif
+    switch (addr) {
+    default:
+        memcpy(&ret, &s->aesc_base_regs[addr], size);
+#if 0
+        qemu_log_mask(LOG_UNIMP,
+                      "SEP AESC_BASE: Unknown read at 0x" HWADDR_FMT_plx
+                      " with value 0x%" PRIX64 "\n",
+                      addr, ret);
+#endif
+        break;
+    }
+
+    return ret;
+}
+
+static const MemoryRegionOps aesc_base_reg_ops = {
+    .write = aesc_base_reg_write,
+    .read = aesc_base_reg_read,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+    .valid.min_access_size = 4,
+    .valid.max_access_size = 4,
+    .impl.min_access_size = 4,
+    .impl.max_access_size = 4,
+    .valid.unaligned = false,
+};
+
 static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
     ApplePKAState *s = opaque;
+    AppleSEPState *sep = s->sep;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
@@ -2471,10 +2566,8 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(
-        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
     ApplePKAState *s = opaque;
+    AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -3319,12 +3412,15 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
         s->shmbuf_base = SEP_SHMBUF_BASE;
         s->trace_buffer_base_offset = 0x10000;
         s->debug_trace_size = 0x10000;
-    } /* else if (s->chip_id == 0x8015) {
+    } else if (s->chip_id == 0x8015) {
         s->shmbuf_base = 0; // is dynamic
-        s->trace_buffer_base_offset = 0x10000;
-        s->debug_trace_size = 0x10000;
-    } */
-    else {
+        s->trace_buffer_base_offset = 0x10000; // ???
+        s->debug_trace_size = 0x10000; // ???
+    } else if (s->chip_id == 0x8000) {
+        s->shmbuf_base = 0; // is dynamic ???
+        s->trace_buffer_base_offset = 0x10000; // ???
+        s->debug_trace_size = 0x10000; // ???
+    } else {
         g_assert_not_reached();
     }
 
@@ -3362,8 +3458,11 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
     memory_region_init_io(&s->key_base_mr, OBJECT(dev), &key_base_reg_ops, s,
                           "sep.key_base", KEY_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->key_base_mr);
+    memory_region_init_io(&s->key_fkey_mr, OBJECT(dev), &key_fkey_reg_ops, s,
+                          "sep.key_fkey", KEY_FKEY_REG_SIZE_T8015);
+    sysbus_init_mmio(sbd, &s->key_fkey_mr);
     memory_region_init_io(&s->key_fcfg_mr, OBJECT(dev), &key_fcfg_reg_ops, s,
-                          "sep.key_fcfg", KEY_FCFG_REG_SIZE);
+                          "sep.key_fcfg", KEY_FCFG_REG_SIZE_T8020);
     sysbus_init_mmio(sbd, &s->key_fcfg_mr);
     memory_region_init_io(&s->moni_base_mr, OBJECT(dev), &moni_base_reg_ops, s,
                           "sep.moni_base", MONI_BASE_REG_SIZE);
@@ -3380,9 +3479,14 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
     memory_region_init_io(&s->aess_base_mr, OBJECT(dev), &aess_base_reg_ops,
                           &s->aess_state, "sep.aess_base", AESS_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->aess_base_mr);
+    // at least >= t8015 have this (aesh), according to their seprom's, but I'm
+    // not sure about s8000
     memory_region_init_io(&s->aesh_base_mr, OBJECT(dev), &aesh_base_reg_ops, s,
                           "sep.aesh_base", AESH_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->aesh_base_mr);
+    memory_region_init_io(&s->aesc_base_mr, OBJECT(dev), &aesc_base_reg_ops, s,
+                          "sep.aesc_base", AESC_BASE_REG_SIZE);
+    sysbus_init_mmio(sbd, &s->aesc_base_mr);
     memory_region_init_io(&s->pka_base_mr, OBJECT(dev), &pka_base_reg_ops,
                           &s->pka_state, "sep.pka_base", PKA_BASE_REG_SIZE);
     sysbus_init_mmio(sbd, &s->pka_base_mr);
@@ -3399,44 +3503,74 @@ AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
                           &boot_monitor_reg_ops, s, "sep.boot_monitor",
                           BOOT_MONITOR_REG_SIZE);
     sysbus_init_mmio(sbd, &s->boot_monitor_mr);
-#ifdef SEP_ENABLE_DEBUG_TRACE_MAPPING
     // TODO: Let's think about something for T8015
-    memory_region_init_io(&s->debug_trace_mr, OBJECT(dev), &debug_trace_reg_ops,
-                          s, "sep.debug_trace",
+    memory_region_init_io(&s->debug_trace_mr, OBJECT(dev),
+                          &debug_trace_reg_ops, s, "sep.debug_trace",
                           s->debug_trace_size); // Debug trace printing
-    memory_region_add_subregion(&APPLE_A13(s->cpu)->memory,
-                                s->shmbuf_base + s->trace_buffer_base_offset,
-                                &s->debug_trace_mr);
+#ifdef SEP_ENABLE_DEBUG_TRACE_MAPPING
+    if (s->chip_id >= 0x8020) {
+        if (modern) {
+            memory_region_add_subregion(&APPLE_A13(s->cpu)->memory,
+                                        s->shmbuf_base +
+                                        s->trace_buffer_base_offset,
+                                        &s->debug_trace_mr);
+        } else {
+            memory_region_add_subregion(&APPLE_A9(s->cpu)->memory,
+                                        s->shmbuf_base +
+                                        s->trace_buffer_base_offset,
+                                        &s->debug_trace_mr);
+        }
+    }
 #endif
 
     DTBNode *child = dtb_get_node(node, "iop-sep-nub");
     g_assert_nonnull(child);
 
     MachineState *machine = MACHINE(qdev_get_machine());
-    DeviceState *gpio = NULL;
+    SysBusDevice *gpio = NULL;
     uint32_t sep_gpio_pins = 0x4;
     uint32_t sep_gpio_int_groups = 0x1;
-    gpio = apple_gpio_create("sep_gpio", 0x10000, sep_gpio_pins,
-                             sep_gpio_int_groups);
+    gpio = SYS_BUS_DEVICE(apple_gpio_create("sep_gpio", 0x10000, sep_gpio_pins,
+                                            sep_gpio_int_groups));
     g_assert_nonnull(gpio);
-    sysbus_mmio_map(SYS_BUS_DEVICE(gpio), 0, 0x2414c0000ull); // T8030
+    if (s->chip_id == 0x8030) {
+        sysbus_mmio_map(gpio, 0, 0x2414c0000ull); // T8030
+    } else if (s->chip_id == 0x8020) {
+        sysbus_mmio_map(gpio, 0, 0x241480000ull); // T8020
+    } else if (s->chip_id == 0x8015) {
+        sysbus_mmio_map(gpio, 0, 0x240f00000ull); // T8015
+    } else if (s->chip_id == 0x8000) {
+        sysbus_mmio_map(gpio, 0, 0x20df00000ull); // S8000
+    }
     s->aess_state.chip_id = s->chip_id;
 
+    s->trng_state.sep = s;
+    s->aess_state.sep = s;
+    s->pka_state.sep = s;
+
     for (i = 0; i < sep_gpio_int_groups; i++) {
-        // sysbus_connect_irq(SYS_BUS_DEVICE(gpio), i,
+        // sysbus_connect_irq(gpio, i,
         // qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
     }
     for (i = 0; i < sep_gpio_pins; i++) {
-        // qdev_connect_gpio_out(gpio, i, qdev_get_gpio_in(DEVICE(s->cpu),
-        // ARM_CPU_IRQ));
+        // qdev_connect_gpio_out(DEVICE(gpio), i,
+        // qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
     }
     object_property_add_child(OBJECT(machine), "sep_gpio", OBJECT(gpio));
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(gpio), &error_fatal);
+    sysbus_realize_and_unref(gpio, &error_fatal);
     SysBusDevice *i2c = NULL;
     i2c = apple_i2c_create("sep_i2c");
     g_assert_nonnull(i2c);
     object_property_add_child(OBJECT(machine), "sep_i2c", OBJECT(i2c));
-    sysbus_mmio_map(i2c, 0, 0x241480000ull); // T8030
+    if (s->chip_id == 0x8030) {
+        sysbus_mmio_map(i2c, 0, 0x241480000ull); // T8030
+    } else if (s->chip_id == 0x8020) {
+        sysbus_mmio_map(i2c, 0, 0x241440000ull); // T8020
+    } else if (s->chip_id == 0x8015) {
+        sysbus_mmio_map(i2c, 0, 0x240700000ull); // T8015
+    } else if (s->chip_id == 0x8000) {
+        sysbus_mmio_map(i2c, 0, 0x20d700000ull); // S8000
+    }
     sysbus_realize_and_unref(i2c, &error_fatal);
     uint64_t nvram_size = 64 * KiB;
     if (s->chip_id >= 0x8020) {
@@ -3593,6 +3727,7 @@ static void apple_sep_reset_hold(Object *obj, ResetType type)
     s->pmgr_fuse_changer_bit1_was_set = false;
     memset(s->pmgr_base_regs, 0, sizeof(s->pmgr_base_regs));
     memset(s->key_base_regs, 0, sizeof(s->key_base_regs));
+    memset(s->key_fkey_regs, 0, sizeof(s->key_fkey_regs));
     memset(s->key_fcfg_regs, 0, sizeof(s->key_fcfg_regs));
     memset(s->moni_base_regs, 0, sizeof(s->moni_base_regs));
     memset(s->moni_thrm_regs, 0, sizeof(s->moni_thrm_regs));
@@ -3600,6 +3735,7 @@ static void apple_sep_reset_hold(Object *obj, ResetType type)
     memset(s->eisp_hmac_regs, 0, sizeof(s->eisp_hmac_regs));
     memset(s->aess_base_regs, 0, sizeof(s->aess_base_regs));
     memset(s->aesh_base_regs, 0, sizeof(s->aesh_base_regs));
+    memset(s->aesc_base_regs, 0, sizeof(s->aesc_base_regs));
     memset(s->pka_base_regs, 0, sizeof(s->pka_base_regs));
     memset(s->pka_tmm_regs, 0, sizeof(s->pka_tmm_regs));
     memset(s->misc2_regs, 0, sizeof(s->misc2_regs));
@@ -4564,9 +4700,7 @@ static uint8_t apple_ssc_rx(I2CSlave *i2c)
     DPRINTF("apple_ssc_rx: resp_cur=0x%02x ret=0x%02x\n", ssc->resp_cur - 1,
             ret);
 #if 0
-    MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep;
-    sep = APPLE_SEP(object_property_get_link(OBJECT(machine), "sep", &error_fatal));
+    AppleSEPState *sep = ssc->aess_state->sep;
     apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x10002); // I2C
 #endif
     return ret;

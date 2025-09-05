@@ -52,20 +52,23 @@ DECLARE_INSTANCE_CHECKER(AppleSSCState, APPLE_SSC, TYPE_APPLE_SSC)
 #define SEP_MMIO_INDEX_PMGR (1)
 #define SEP_MMIO_INDEX_TRNG_REGS (2)
 #define SEP_MMIO_INDEX_KEY (3)
-#define SEP_MMIO_INDEX_KEY_FCFG (4)
-#define SEP_MMIO_INDEX_MONI (5)
-#define SEP_MMIO_INDEX_MONI_THRM (6)
-#define SEP_MMIO_INDEX_EISP (7)
-#define SEP_MMIO_INDEX_EISP_HMAC (8)
-#define SEP_MMIO_INDEX_AESS (9)
-#define SEP_MMIO_INDEX_AESH (10)
-#define SEP_MMIO_INDEX_PKA (11)
-#define SEP_MMIO_INDEX_PKA_TMM (12)
-#define SEP_MMIO_INDEX_MISC2 (13)
-#define SEP_MMIO_INDEX_PROGRESS (14)
-#define SEP_MMIO_INDEX_BOOT_MONI (15)
+#define SEP_MMIO_INDEX_KEY_FKEY (4)
+#define SEP_MMIO_INDEX_KEY_FCFG (5)
+#define SEP_MMIO_INDEX_MONI (6)
+#define SEP_MMIO_INDEX_MONI_THRM (7)
+#define SEP_MMIO_INDEX_EISP (8)
+#define SEP_MMIO_INDEX_EISP_HMAC (9)
+#define SEP_MMIO_INDEX_AESS (10)
+#define SEP_MMIO_INDEX_AESH (11)
+#define SEP_MMIO_INDEX_AESC (12)
+#define SEP_MMIO_INDEX_PKA (13)
+#define SEP_MMIO_INDEX_PKA_TMM (14)
+#define SEP_MMIO_INDEX_MISC2 (15)
+#define SEP_MMIO_INDEX_PROGRESS (16)
+#define SEP_MMIO_INDEX_BOOT_MONITOR (17)
 
 typedef struct {
+    AppleSEPState *sep;
     uint8_t key[32];
     uint8_t fifo[16];
     uint32_t offset_0x70;
@@ -77,6 +80,7 @@ typedef struct {
 } AppleTRNGState;
 
 typedef struct {
+    AppleSEPState *sep;
     uint32_t chip_id;
     uint32_t status; // 0x4
     uint32_t command; // 0x8
@@ -122,6 +126,7 @@ typedef struct {
 } AppleAESSState;
 
 typedef struct {
+    AppleSEPState *sep;
     uint32_t command; // 0x0
     uint32_t status0; // 0x4
     uint32_t status_in0; // 0x8
@@ -205,18 +210,23 @@ struct AppleSSCState {
     // bool cmd_0x7_called;
 };
 
-#define PMGR_BASE_REG_SIZE (0x10000)
-#define TRNG_REGS_REG_SIZE (0x10000)
-#define KEY_BASE_REG_SIZE (0x10000)
-// #define KEY_FKEY_REG_SIZE (0x4000) // T8015
-#define KEY_FCFG_REG_SIZE (0x14000) // T8030 ; T8015 size is 0x10000
+#define PMGR_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define TRNG_REGS_REG_SIZE (0x10000) // T8015/T8030
+#define KEY_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define KEY_FKEY_REG_SIZE_S8000 (0x1000) // S8000
+#define KEY_FKEY_REG_SIZE_T8015 (0x4000) // T8015
+#define KEY_FCFG_REG_SIZE_S8000 (0x4000) // S8000
+#define KEY_FCFG_REG_SIZE_T8015 (0x10000) // T8015
+#define KEY_FCFG_REG_SIZE_T8020 (0x18000) // T8020
+#define KEY_FCFG_REG_SIZE_T8030 (0x14000) // T8030
 #define MONI_BASE_REG_SIZE (0x40000)
 #define MONI_THRM_REG_SIZE (0x10000)
 #define EISP_BASE_REG_SIZE (0x240000)
 #define EISP_HMAC_REG_SIZE (0x4000)
-#define AESS_BASE_REG_SIZE (0x10000)
+#define AESC_BASE_REG_SIZE (0x4000) // S8000
+#define AESS_BASE_REG_SIZE (0x10000) // T8015/T8030
 #define AESH_BASE_REG_SIZE (0x10000)
-#define PKA_BASE_REG_SIZE (0x10000)
+#define PKA_BASE_REG_SIZE (0x10000) // T8015/T8030
 #define PKA_TMM_REG_SIZE (0x4000)
 #define MISC2_REG_SIZE (0x4000) // ?
 #define PROGRESS_REG_SIZE (0x4000) // ?
@@ -244,6 +254,7 @@ struct AppleSEPState {
     MemoryRegion pmgr_base_mr;
     MemoryRegion trng_regs_mr;
     MemoryRegion key_base_mr;
+    MemoryRegion key_fkey_mr;
     MemoryRegion key_fcfg_mr;
     MemoryRegion moni_base_mr;
     MemoryRegion moni_thrm_mr;
@@ -251,6 +262,7 @@ struct AppleSEPState {
     MemoryRegion eisp_hmac_mr;
     MemoryRegion aess_base_mr;
     MemoryRegion aesh_base_mr;
+    MemoryRegion aesc_base_mr;
     MemoryRegion pka_base_mr;
     MemoryRegion pka_tmm_mr;
     MemoryRegion misc2_mr;
@@ -259,13 +271,16 @@ struct AppleSEPState {
     MemoryRegion debug_trace_mr;
     uint8_t pmgr_base_regs[PMGR_BASE_REG_SIZE];
     uint8_t key_base_regs[KEY_BASE_REG_SIZE];
-    uint8_t key_fcfg_regs[KEY_FCFG_REG_SIZE];
+    // picking the largest sizes, just to be sure
+    uint8_t key_fkey_regs[KEY_FKEY_REG_SIZE_T8015];
+    uint8_t key_fcfg_regs[KEY_FCFG_REG_SIZE_T8020];
     uint8_t moni_base_regs[MONI_BASE_REG_SIZE];
     uint8_t moni_thrm_regs[MONI_THRM_REG_SIZE];
     uint8_t eisp_base_regs[EISP_BASE_REG_SIZE];
     uint8_t eisp_hmac_regs[EISP_HMAC_REG_SIZE];
     uint8_t aess_base_regs[AESS_BASE_REG_SIZE];
     uint8_t aesh_base_regs[AESH_BASE_REG_SIZE];
+    uint8_t aesc_base_regs[AESC_BASE_REG_SIZE];
     uint8_t pka_base_regs[PKA_BASE_REG_SIZE];
     uint8_t pka_tmm_regs[PKA_TMM_REG_SIZE];
     uint8_t misc2_regs[MISC2_REG_SIZE];
