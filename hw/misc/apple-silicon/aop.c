@@ -821,7 +821,6 @@ SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
     s->align = prop == NULL ? 0x40 : ldl_le_p(prop->data);
 
     dtb_set_prop_u32(child, "pre-loaded", 1);
-    dtb_set_prop_u32(child, "running", 1);
 
     return sbd;
 }

@@ -743,7 +743,6 @@ SysBusDevice *apple_sio_create(DTBNode *node, AppleA7IOPVersion version,
     sysbus_init_mmio(sbd, &s->ascv2_iomem);
 
     dtb_set_prop_u32(child, "pre-loaded", 1);
-    // dtb_set_prop_u32(child, "running", 1);
 
     return sbd;
 }
