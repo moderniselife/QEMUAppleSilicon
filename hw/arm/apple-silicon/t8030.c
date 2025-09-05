@@ -2254,7 +2254,7 @@ static void t8030_create_sep(T8030MachineState *t8030_machine)
                     t8030_machine->soc_base_pa + 0x410C4000);
     sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_PROGRESS,
                     t8030_machine->soc_base_pa + 0x41280000);
-    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_BOOT_MONI,
+    sysbus_mmio_map(SYS_BUS_DEVICE(sep), SEP_MMIO_INDEX_BOOT_MONITOR,
                     t8030_machine->soc_base_pa + 0x41500000);
 
     prop = dtb_find_prop(child, "interrupts");
