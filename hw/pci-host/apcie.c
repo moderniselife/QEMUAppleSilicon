@@ -21,6 +21,7 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dart.h"
+#include "hw/intc/apple_aic.h"
 #include "hw/irq.h"
 #include "hw/misc/unimp.h"
 #include "hw/pci-host/apcie.h"
@@ -85,7 +86,7 @@ void port_devices_set_power(ApplePCIEPort *port, bool power)
 
 static void apcie_port_gpio_set_clkreq(DeviceState *dev, int level)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(dev);
+    ApplePCIEPort *port = dev;
     DPRINTF("%s: device set_irq: old: %d ; new %d\n", __func__,
             port->gpio_clkreq_val, level);
     port->gpio_clkreq_val = level;
@@ -94,7 +95,7 @@ static void apcie_port_gpio_set_clkreq(DeviceState *dev, int level)
 
 static void apcie_port_gpio_perst(void *opaque, int n, int level)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     bool val = !!level;
     assert(n == 0);
     DPRINTF("%s: old: %d ; new %d\n", __func__, port->gpio_perst_val, val);
@@ -116,7 +117,7 @@ static int apple_pcie_map_irq(PCIDevice *pci_dev, int irq_num)
 
 static void apple_pcie_set_irq(void *opaque, int irq_num, int level)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
 
     qemu_set_irq(host->irqs[irq_num], level);
 }
@@ -167,7 +168,7 @@ static uint64_t apple_pcie_port_msi_read(void *opaque, hwaddr addr,
 static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
                                       unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     ApplePCIEHost *host = port->host;
     int bus_nr = port->bus_nr;
 
@@ -190,17 +191,21 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
     //uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
     uint32_t status = BIT(msi_intr_index) &
                       port->msi.intr[msi_intr_index].enable;
+    uint32_t msi_interrupt = host->pcie->msi_vector_offset + data;
     DPRINTF("%s: status: 0x%x ; msi_enable: 0x%x ; BIT(msi_intr_index): 0x%"
-            PRIX64 " ; msi_intr_index: 0x%x\n", __func__, status,
-            port->msi.intr[msi_intr_index].enable, BIT(msi_intr_index),
-            msi_intr_index);
+            PRIX64 " ; msi_intr_index: 0x%x ; msi_interrupt: %d/0x%x\n",
+            __func__, status, port->msi.intr[msi_intr_index].enable,
+            BIT(msi_intr_index), msi_intr_index, msi_interrupt, msi_interrupt);
+
     status = true;
     // status might be msi_intr_index
     if (status) {
         // iOS will only acknowledge the interrupt when it expects it, and will
         // cause an interrupt storm otherwise
         // need to find a place to quisce it properly
+        //apple_aic_unmask_interrupt(msi_interrupt);
         qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
+        //apple_aic_mask_interrupt(msi_interrupt);
         // pulsing doesn't work.
         // qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
     }
@@ -349,7 +354,7 @@ static void apple_pcie_port_bridge_config_write(PCIDevice *d, uint32_t address,
 static uint64_t apple_pcie_root_conf_access(void *opaque, hwaddr addr,
                                             uint64_t *data, unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     hwaddr orig_addr = addr;
 
     uint8_t busnum, device, function, devfn;
@@ -439,16 +444,17 @@ static const MemoryRegionOps apple_pcie_root_conf_ops = {
 static uint64_t apple_pcie_root_common_read(void *opaque, hwaddr addr,
                                             unsigned int size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     uint32_t val = 0;
 
     switch (addr) {
     case 0x0:
         // break;
         goto jump_default;
-    case 0x24:
-        // break;
-        goto jump_default;
+    case 0x24: // TODO: for T8015
+        val = 0xffffffff;
+        break;
+        // goto jump_default;
     case 0x34:
         // break;
         goto jump_default;
@@ -481,7 +487,7 @@ static uint64_t apple_pcie_root_common_read(void *opaque, hwaddr addr,
 static void apple_pcie_root_common_write(void *opaque, hwaddr addr,
                                          uint64_t data, unsigned int size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     ApplePCIEPort *port;
     int i;
 
@@ -554,7 +560,7 @@ static const MemoryRegionOps apple_pcie_root_common_ops = {
 static uint64_t apple_pcie_host_root_phy_read(void *opaque, hwaddr addr,
                                               unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     uint32_t val = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -585,7 +591,7 @@ static uint64_t apple_pcie_host_root_phy_read(void *opaque, hwaddr addr,
 static void apple_pcie_host_root_phy_write(void *opaque, hwaddr addr,
                                            uint64_t data, unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -639,7 +645,7 @@ static const MemoryRegionOps apple_pcie_host_root_phy_ops = {
 static uint64_t apple_pcie_host_root_phy_ip_read(void *opaque, hwaddr addr,
                                                  unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     uint32_t val = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -664,7 +670,7 @@ static uint64_t apple_pcie_host_root_phy_ip_read(void *opaque, hwaddr addr,
 static void apple_pcie_host_root_phy_ip_write(void *opaque, hwaddr addr,
                                               uint64_t data, unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -691,7 +697,7 @@ static const MemoryRegionOps apple_pcie_host_root_phy_ip_ops = {
 static uint64_t apple_pcie_host_root_axi2af_read(void *opaque, hwaddr addr,
                                                  unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
     uint32_t val = 0;
 
 #ifdef ENABLE_CPU_DUMP_STATE
@@ -734,7 +740,7 @@ static uint64_t apple_pcie_host_root_axi2af_read(void *opaque, hwaddr addr,
 static void apple_pcie_host_root_axi2af_write(void *opaque, hwaddr addr,
                                               uint64_t data, unsigned size)
 {
-    ApplePCIEHost *host = APPLE_PCIE_HOST(opaque);
+    ApplePCIEHost *host = opaque;
 
     DPRINTF("%s: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
             __func__, addr, data);
@@ -827,7 +833,7 @@ static const MemoryRegionOps apple_pcie_host_root_axi2af_ops = {
 static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
                                             unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     uint32_t is_port_enabled;
     uint32_t val = 0;
     int msi_intr_index = 0;
@@ -974,7 +980,7 @@ static uint64_t apple_pcie_port_config_read(void *opaque, hwaddr addr,
 static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
                                          uint64_t data, unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     uint32_t is_port_enabled;
     int msi_intr_index = 0;
 
@@ -1021,17 +1027,6 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
         break;
     case 0x100: // pcielint? ; and enableInterrupts?
                 // clearLinkUpInterrupt/clearPortInterrupts
-#if 0
-        DPRINTF("%s: reg==0x100: Port %u: previous_msi_status: 0x%x\n",
-                __func__, port->bus_nr, port->msi.intr[msi_intr_index].status);
-        port->msi.intr[msi_intr_index].status &= ~data; // not xor
-        DPRINTF("%s: reg==0x100: Port %u: current_msi_status: 0x%x\n", __func__,
-                port->bus_nr, port->msi.intr[msi_intr_index].status);
-        if (!port->msi.intr[msi_intr_index].status) {
-            apple_pcie_set_own_irq(port, 0);
-            // qemu_set_irq(port->msi_irqs[msi_intr_index], 0);
-        }
-#endif
 #if 1
         DPRINTF("%s: reg==0x100: Port %u: previous_port_last_interrupt: 0x%x\n",
                 __func__, port->bus_nr, port->port_last_interrupt);
@@ -1074,15 +1069,6 @@ static void apple_pcie_port_config_write(void *opaque, hwaddr addr,
     case 0x13c:
         // bit8 is hot reset
         port->port_hotreset = data;
-#if 0
-        if ((data & 0x100) != 0) {
-            // return 0x4000 at offset 0x100
-            port->port_last_interrupt |= 0x4000; // link-down interrupt
-        }
-        if (port->port_last_interrupt) {
-            apple_pcie_set_own_irq(port, 1);
-        }
-#endif
 #if 1
         if ((data & 0x100) != 0) {
             // return 0x4000 at offset 0x100
@@ -1235,7 +1221,7 @@ static uint64_t apple_pcie_port_config_ltssm_debug_read(void *opaque,
                                                         hwaddr addr,
                                                         unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     uint32_t val = 0;
 
 // #ifdef ENABLE_CPU_DUMP_STATE
@@ -1267,7 +1253,7 @@ static void apple_pcie_port_config_ltssm_debug_write(void *opaque, hwaddr addr,
                                                      uint64_t data,
                                                      unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
 
     DPRINTF("%s: Port %u: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
             "\n",
@@ -1312,7 +1298,7 @@ static const MemoryRegionOps apple_pcie_port_config_ltssm_debug_ops = {
 static uint64_t apple_pcie_port_phy_glue_read(void *opaque, hwaddr addr,
                                               unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     uint32_t val = 0;
 
 // #ifdef ENABLE_CPU_DUMP_STATE
@@ -1341,7 +1327,7 @@ static uint64_t apple_pcie_port_phy_glue_read(void *opaque, hwaddr addr,
 static void apple_pcie_port_phy_glue_write(void *opaque, hwaddr addr,
                                            uint64_t data, unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
 
     DPRINTF("%s: Port %u: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
             "\n",
@@ -1388,7 +1374,7 @@ static const MemoryRegionOps apple_pcie_port_phy_glue_ops = {
 static uint64_t apple_pcie_port_phy_ip_read(void *opaque, hwaddr addr,
                                             unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
     uint32_t val = 0;
 
 // #ifdef ENABLE_CPU_DUMP_STATE
@@ -1419,7 +1405,7 @@ static uint64_t apple_pcie_port_phy_ip_read(void *opaque, hwaddr addr,
 static void apple_pcie_port_phy_ip_write(void *opaque, hwaddr addr,
                                          uint64_t data, unsigned size)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
 
     DPRINTF("%s: Port %u: WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
             "\n",
@@ -1556,8 +1542,11 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
                                                    dart_name, &error_fatal));
         g_assert_nonnull(dart);
 
-        // dma_mr = apple_dart_iommu_mr(dart, 0);
-        dma_mr = apple_dart_iommu_mr(dart, 1);
+        if (host->pcie->chip_id == 0x8015) {
+            dma_mr = apple_dart_iommu_mr(dart, 0);
+        } else {
+            dma_mr = apple_dart_iommu_mr(dart, 1);
+        }
         g_assert_nonnull(dma_mr);
         g_assert_nonnull(object_property_add_const_link(OBJECT(port), "dma-mr",
                                                         OBJECT(dma_mr)));
@@ -1671,6 +1660,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
     PCIHostState *pci;
     // size_t i;
     int i, j;
+    int mmio_index = 0;
     DTBProp *prop;
     uint64_t *reg;
     char temp_name[32];
@@ -1692,6 +1682,10 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
+    prop = dtb_find_prop(s->node, "msi-vector-offset");
+    g_assert_nonnull(prop);
+    s->msi_vector_offset = *(uint32_t*)prop->data;
+
     for (i = 0; i < ARRAY_SIZE(host->irqs); i++) {
         sysbus_init_irq(sbd, &host->irqs[i]);
     }
@@ -1702,7 +1696,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
     uint64_t common_index, port_index, port_count, port_entries, root_mappings,
         port_mappings;
 
-    // t8015 is similar to s800x
+    // t8015 is similar to both, s800x and t8020/t8030
     if (chip_id == 0x8000 || chip_id == 0x8003) {
         DPRINTF("%s: compatible check: use S8000(/S8003) mode\n", __func__);
 
@@ -1710,7 +1704,16 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
         port_index = 1;
         port_count = 4;
         port_entries = 2;
-        root_mappings = 2;
+        root_mappings = 3;
+        port_mappings = 1;
+    } else if (chip_id == 0x8015) {
+        DPRINTF("%s: compatible check: use T8015 mode\n", __func__);
+
+        common_index = 9;
+        port_index = 1;
+        port_count = 4;
+        port_entries = 2;
+        root_mappings = 4;
         port_mappings = 1;
     } else if (chip_id == 0x8020 || chip_id == 0x8030) {
         DPRINTF("%s: compatible check: use T8030(/T8020) mode\n", __func__);
@@ -1737,30 +1740,33 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
                           &apple_pcie_root_conf_ops, host, "root_cfg",
                           reg[0 * 2 + 1]);
     sysbus_init_mmio(sbd, &host->root_cfg);
-    sysbus_mmio_map(sbd, 0, reg[0 * 2]);
+    sysbus_mmio_map(sbd, mmio_index++, reg[0 * 2]);
+
     memory_region_init_io(&host->root_common, OBJECT(host),
                           &apple_pcie_root_common_ops, host, "root_common",
-                          reg[common_index * 2 + 1]);
+                          reg[(common_index + 0) * 2 + 1]);
     sysbus_init_mmio(sbd, &host->root_common);
-    sysbus_mmio_map(sbd, 1, reg[common_index * 2]);
-    if (chip_id == 0x8020 || chip_id == 0x8030) {
-        memory_region_init_io(&host->root_phy, OBJECT(host),
-                              &apple_pcie_host_root_phy_ops, host, "root_phy",
-                              reg[2 * 2 + 1]);
-        sysbus_init_mmio(sbd, &host->root_phy);
-        sysbus_mmio_map(sbd, 2, reg[2 * 2]);
+    sysbus_mmio_map(sbd, mmio_index++, reg[(common_index + 0) * 2]);
 
+    memory_region_init_io(&host->root_phy, OBJECT(host),
+                          &apple_pcie_host_root_phy_ops, host, "root_phy",
+                          reg[(common_index + 1) * 2 + 1]);
+    sysbus_init_mmio(sbd, &host->root_phy);
+    sysbus_mmio_map(sbd, mmio_index++, reg[(common_index + 1) * 2]);
+
+    if (root_mappings >= 4) {
         memory_region_init_io(&host->root_phy_ip, OBJECT(host),
                               &apple_pcie_host_root_phy_ip_ops, host,
-                              "root_phy_ip", reg[3 * 2 + 1]);
+                              "root_phy_ip", reg[(common_index + 2) * 2 + 1]);
         sysbus_init_mmio(sbd, &host->root_phy_ip);
-        sysbus_mmio_map(sbd, 3, reg[3 * 2]);
-
+        sysbus_mmio_map(sbd, mmio_index++, reg[(common_index + 2) * 2]);
+    }
+    if (root_mappings >= 5) {
         memory_region_init_io(&host->root_axi2af, OBJECT(host),
                               &apple_pcie_host_root_axi2af_ops, host,
-                              "root_axi2af", reg[4 * 2 + 1]);
+                              "root_axi2af", reg[(common_index + 3) * 2 + 1]);
         sysbus_init_mmio(sbd, &host->root_axi2af);
-        sysbus_mmio_map(sbd, 4, reg[4 * 2]);
+        sysbus_mmio_map(sbd, mmio_index++, reg[(common_index + 3) * 2]);
     }
 
     // the ports have to come later, as root and port phy's will overlap
@@ -1777,7 +1783,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
             &port->port_cfg, OBJECT(port), &apple_pcie_port_config_ops, port,
             temp_name, reg[(port_index + (i * port_entries) + 0) * 2 + 1]);
         sysbus_init_mmio(sbd, &port->port_cfg);
-        sysbus_mmio_map(sbd, root_mappings + 0 + (i * port_mappings),
+        sysbus_mmio_map(sbd, mmio_index++,
                         reg[(port_index + (i * port_entries) + 0) * 2 + 0]);
         if (chip_id == 0x8020 || chip_id == 0x8030) {
             snprintf(temp_name, sizeof(temp_name), "port%u_config_ltssm_debug",
@@ -1787,7 +1793,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
                 &apple_pcie_port_config_ltssm_debug_ops, port, temp_name,
                 reg[(port_index + (i * port_entries) + 1) * 2 + 1]);
             sysbus_init_mmio(sbd, &port->port_config_ltssm_debug);
-            sysbus_mmio_map(sbd, root_mappings + 1 + (i * port_mappings),
+            sysbus_mmio_map(sbd, mmio_index++,
                             reg[(port_index + (i * port_entries) + 1) * 2 + 0]);
 
             snprintf(temp_name, sizeof(temp_name), "port%u_phy_glue", i);
@@ -1796,7 +1802,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
                 &apple_pcie_port_phy_glue_ops, port, temp_name,
                 reg[(port_index + (i * port_entries) + 2) * 2 + 1]);
             sysbus_init_mmio(sbd, &port->port_phy_glue);
-            sysbus_mmio_map(sbd, root_mappings + 2 + (i * port_mappings),
+            sysbus_mmio_map(sbd, mmio_index++,
                             reg[(port_index + (i * port_entries) + 2) * 2 + 0]);
 
             snprintf(temp_name, sizeof(temp_name), "port%u_phy_ip", i);
@@ -1805,7 +1811,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
                 port, temp_name,
                 reg[(port_index + (i * port_entries) + 3) * 2 + 1]);
             sysbus_init_mmio(sbd, &port->port_phy_ip);
-            sysbus_mmio_map(sbd, root_mappings + 3 + (i * port_mappings),
+            sysbus_mmio_map(sbd, mmio_index++,
                             reg[(port_index + (i * port_entries) + 3) * 2 + 0]);
         } else {
             snprintf(temp_name, sizeof(temp_name), "port%u_phy", i);
@@ -1815,7 +1821,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
         }
     }
 
-    if (chip_id == 0x8020 || chip_id == 0x8030) {
+    if (chip_id == 0x8015 || chip_id == 0x8020 || chip_id == 0x8030) {
         pci_set_power(PCI_DEVICE(s->ports[0]), false);
         pci_set_power(PCI_DEVICE(s->ports[1]), false);
         // pci_set_power(PCI_DEVICE(s->ports[2]), false);
@@ -1880,7 +1886,7 @@ static void apple_pcie_port_reset_hold(Object *obj, ResetType type)
 static AddressSpace *apple_pcie_host_set_iommu(PCIBus *bus, void *opaque,
                                                int devfn)
 {
-    ApplePCIEPort *port = APPLE_PCIE_PORT(opaque);
+    ApplePCIEPort *port = opaque;
 
     return &port->dma_as;
 }

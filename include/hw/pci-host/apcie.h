@@ -41,8 +41,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(ApplePCIEHost, APPLE_PCIE_HOST)
 #define TYPE_APPLE_PCIE "apple-pcie"
 OBJECT_DECLARE_SIMPLE_TYPE(ApplePCIEState, APPLE_PCIE)
 
-// sizes: s8000 == 0x8000 ; t8030 == 0x4000
-#define APCIE_COMMON_REGS_LENGTH 0x8000
+// sizes: s8000 == 0x8000 ; t8030 == 0x4000 ; t8015 == 0x50000
+// #define APCIE_COMMON_REGS_LENGTH 0x8000
+#define APCIE_COMMON_REGS_LENGTH 0x50000
 
 #define APCIE_ROOT_COMMON_ADDRESS 0x600000000ULL
 
@@ -152,6 +153,7 @@ struct ApplePCIEState {
     ApplePCIEHost *host;
     ApplePCIEPort *ports[APCIE_MAX_PORTS];
     uint32_t chip_id;
+    uint32_t msi_vector_offset;
 };
 
 void port_devices_set_power(ApplePCIEPort *port, bool power);
