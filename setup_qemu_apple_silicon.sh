@@ -42,8 +42,37 @@ install_dependencies() {
         fi
         
         brew update
-        brew install libtool glib libtasn1 meson ninja pixman gnutls libgcrypt pkgconf lzfse capstone nettle ncurses libslirp libssh libpng jpeg-turbo zstd
+        brew install wget libtool glib libtasn1 meson ninja pixman gnutls libgcrypt pkgconf lzfse capstone nettle ncurses libslirp libssh libpng jpeg-turbo zstd python@3.11
         
+        # Create and activate virtual environment
+        echo -e "${GREEN}Creating Python virtual environment...${NC}"
+        VENV_DIR="$(pwd)/venv"
+        python3.11 -m venv "$VENV_DIR"
+        source "$VENV_DIR/bin/activate"
+        
+        # Install Python dependencies in the virtual environment
+        echo -e "${GREEN}Installing Python dependencies...${NC}"
+        pip install --upgrade pip
+        pip install pyasn1 pyasn1-modules pyimg4 pyyaml
+
+        # Setup Build Environment
+        # 0) Make sure no cross/stray vars are poisoning clang
+        unset SDKROOT CPATH LIBRARY_PATH CFLAGS CXXFLAGS LDFLAGS LD DYLD_LIBRARY_PATH
+
+        # 1) Use Apple toolchain
+        export CC="$(xcrun -find clang)"
+        export CXX="$(xcrun -find clang++)"
+        export AR="$(xcrun -find ar)"
+        export RANLIB="$(xcrun -find ranlib)"
+        export LIBTOOL="$(xcrun -find libtool)"
+
+        # 2) Confirm the linker and SDK
+        xcrun -f ld
+        xcrun --sdk macosx --show-sdk-path
+
+        # 3) Explicitly point clang/ld at the SDK (fixes the 'System' error)
+        export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+                
     elif [[ -f /etc/debian_version ]]; then
         # Debian/Ubuntu
         sudo apt-get update
@@ -54,8 +83,16 @@ install_dependencies() {
             libgnutls28-dev libgmp10 libgmp3-dev lzfse liblzfse-dev libgtk-3-dev \
             libsdl2-dev python3-pip wget unzip
         
-        # Install Python dependencies
-        pip3 install pyasn1 pyasn1-modules pyimg4 pyyaml
+        # Create and activate virtual environment
+        echo -e "${GREEN}Creating Python virtual environment...${NC}"
+        VENV_DIR="$(pwd)/venv"
+        python3 -m venv "$VENV_DIR"
+        source "$VENV_DIR/bin/activate"
+        
+        # Install Python dependencies in the virtual environment
+        echo -e "${GREEN}Installing Python dependencies...${NC}"
+        pip install --upgrade pip
+        pip install pyasn1 pyasn1-modules pyimg4 pyyaml
         
     else
         echo -e "${RED}Unsupported OS. Please install dependencies manually.${NC}"
@@ -73,13 +110,17 @@ build_qemu() {
     
     # Configure QEMU
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig ../configure --target-list=aarch64-softmmu
+        # PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig ../configure --target-list=aarch64-softmmu -extra-cflags="-I/opt/homebrew/opt/lzfse/include -I/opt/homebrew/opt/gmp/include" --extra-ldflags="-L/opt/homebrew/opt/lzfse/lib -L/opt/homebrew/opt/gmp/lib"
+
+        LIBTOOL="glibtool" ../configure --target-list=aarch64-softmmu,x86_64-softmmu --disable-bsd-user --disable-guest-agent --enable-lzfse --enable-slirp --enable-capstone --enable-curses --enable-libssh --enable-virtfs --enable-zstd --extra-cflags=-DNCURSES_WIDECHAR=1 --disable-sdl --disable-gtk --enable-cocoa --enable-nettle --enable-gnutls --extra-cflags="-I/opt/homebrew/include -I/opt/homebrew/opt/lzfse/include -I/opt/homebrew/opt/gmp/include" --extra-ldflags="-L/opt/homebrew/lib -L/opt/homebrew/opt/lzfse/lib -L/opt/homebrew/opt/gmp/lib" --disable-werror
+
     else
         ../configure --target-list=aarch64-softmmu
     fi
     
     # Build QEMU
-    make -j$(nproc)
+    # make -j$(nproc)
+    make -j$(sysctl -n hw.logicalcpu)
     
     # Return to the original directory
     cd ..
@@ -125,18 +166,45 @@ download_ipsw() {
         echo "Extracting IPSW..."
         unzip -q "iPhone11,8,iPhone12,1_14.0_18A5351d_Restore.ipsw" -d "iPhone11_8_iPhone12_1_14.0_18A5351d_Restore"
     fi
-    
-    # Download and create AP ticket
-    if [ ! -f "root_ticket.der" ]; then
+
+    # Return to the original directory
+    cd ..
+}
+
+# Function to prepare AP ticket
+prepare_ap_ticket() {
+    echo -e "${GREEN}Preparing AP ticket...${NC}"
+    cd "${FIRMWARE_DIR}" || exit 1
+
+    # Download AP ticket creation script if not exists
+    if [ ! -f "create_apticket.py" ]; then
         echo "Downloading AP ticket creation script..."
         wget -q "https://github.com/ChefKissInc/QEMUAppleSiliconTools/raw/refs/heads/master/create_apticket.py"
-        
+    fi
+    
+    if [ ! -f "root_ticket.der" ]; then
         echo "Creating AP ticket..."
+
+        # Download ticket.shsh2 if not exists
+        if [ ! -f "ticket.shsh2" ]; then
+            echo "Downloading ticket.shsh2..."
+            wget -q "https://raw.githubusercontent.com/ChefKissInc/QEMUAppleSiliconTools/refs/heads/master/ticket.shsh2"
+        fi
+        
+        # Activate virtual environment and run the script
+        source "$(pwd)/../venv/bin/activate"
         python3 create_apticket.py n104ap "iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/BuildManifest.plist" ticket.shsh2 root_ticket.der
+        
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Failed to create AP ticket. Please check the error above.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}AP ticket already exists. Skipping creation.${NC}"
     fi
     
     # Return to the original directory
-    cd ..
+    cd - > /dev/null || exit 1
 }
 
 # Function to prepare SEP firmware
@@ -158,6 +226,8 @@ prepare_sep_firmware() {
         # Create SEP ticket
         if [ ! -f "sep_root_ticket.der" ]; then
             echo "Creating SEP ticket..."
+            # Activate virtual environment and run the script
+            source "$(pwd)/../venv/bin/activate"
             python3 create_septicket.py n104ap "iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/BuildManifest.plist" ticket.shsh2 sep_root_ticket.der
             if [ $? -ne 0 ]; then
                 echo -e "${RED}Failed to create SEP ticket. Please check the error above.${NC}"
@@ -167,9 +237,63 @@ prepare_sep_firmware() {
         
         # Check if img4 utility is installed
         if ! command -v img4 &> /dev/null; then
-            echo -e "${YELLOW}img4 utility not found. Please install it from https://github.com/xerub/img4lib${NC}"
-            echo "After installation, make sure it's in your PATH and run this script again."
-            exit 1
+            echo -e "${YELLOW}img4 utility not found. Installing from xerub/img4lib...${NC}"
+            
+            # Install dependencies
+            brew install libplist libimobiledevice
+            
+            # Clone and build img4lib
+            local temp_dir=$(mktemp -d)
+            git clone --depth=1 https://github.com/xerub/img4lib.git "$temp_dir"
+            # Pull submodules
+            echo "Temp dir: $temp_dir"
+            cd "$temp_dir" || exit 1
+            git submodule update --init --recursive
+            echo "Building lzfse submodule..."
+            # Initialize and build lzfse submodule first
+            # (cd lzfse && \
+            #  git submodule init && \
+            #  git submodule update && \
+            #  make clean && \
+            #  make CC="${CC}" LD="${LD}")
+
+            # Force Apple toolchain everywhere
+            export CC="$(xcrun -find clang)"
+            export CXX="$(xcrun -find clang++)"
+            export AR="$(xcrun -find ar)"
+            export RANLIB="$(xcrun -find ranlib)"
+            export LD="$(xcrun -f ld)"                         # ← important
+            export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+
+            # Make sure Apple /usr/bin comes before Homebrew binutils
+            export PATH="/usr/bin:$PATH"
+            hash -r
+
+            # Sanity checks
+            which ld        # should be /usr/bin/ld
+            ld -v           # should mention Apple ld64, not GNU
+            echo "$LD"      # should be an Apple ld64 path (via xcrun)
+
+            make -C lzfse clean
+            make -C lzfse CC="$CC" AR="$AR" RANLIB="$RANLIB" LD="$LD"
+
+            echo "Building img4lib..."
+            make -j"$(sysctl -n hw.logicalcpu)" COMMONCRYPTO=1 CC="$CC" LD="$CC"
+            # make -C lzfse [CC="cross-cc"] [LD="cross-ld"]
+            # make all
+            # mv img4 /Users/josephshenton/Downloads/img4 
+            # Install to /usr/local/bin (requires sudo)
+            if [ -f "img4" ]; then
+                sudo cp img4 /usr/local/bin/
+                echo -e "${GREEN}Successfully installed img4 utility${NC}"
+            else
+                echo -e "${RED}Failed to build img4 utility. Please install it manually from https://github.com/xerub/img4lib${NC}"
+                exit 1
+            fi
+            
+            # Clean up
+            cd - > /dev/null || exit 1
+            rm -rf "$temp_dir"
         fi
         
         # Decrypt the SEP firmware
@@ -181,9 +305,8 @@ prepare_sep_firmware() {
             read -p "Enter SEP firmware IV+KEY: " SEP_KEY
             
             if [ -z "$SEP_KEY" ]; then
-                echo -e "${RED}No key provided. Please find the SEP firmware keys and try again.${NC}"
-                echo "You can search for 'iPhone11,8 iOS 14.0 beta 5 SEP firmware keys' to find them."
-                exit 1
+                SEP_KEY="017a328b048aab2edcc4cfe043c2d844a55e67143d57938e37ec6b83ba9e181c0d24bd0a6a14f9f39752b967a9c45cfc"
+                echo -e "${YELLOW}Using default SEP firmware IV+KEY: $SEP_KEY${NC}"
             fi
             
             img4 -i "iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/Firmware/all_flash/sep-firmware.n104.RELEASE.im4p" \
@@ -253,9 +376,15 @@ create_run_script() {
 #!/bin/bash
 
 # QEMUAppleSilicon Run Script
-# Usage: ./run_iphone.sh [restore|run]
+# Usage: ./run_iphone.sh [restore|run] [usb_type] [usb_addr] [usb_port]
+# Example: ./run_iphone.sh run unix /tmp/usb_connection 0
+#          ./run_iphone.sh run ipv4 127.0.0.1 8030
 
 MODE=${1:-run}
+USB_TYPE=${2:-unix}
+USB_ADDR=${3:-"/tmp/usb_connection"}
+USB_PORT=${4:-0}
+
 QEMU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${QEMU_DIR}/build"
 FIRMWARE_DIR="${QEMU_DIR}/firmware"
@@ -275,13 +404,13 @@ fi
 
 # Common QEMU arguments
 QEMU_ARGS=(
-    -M t8030
+    -M t8030,usb-conn-type=${USB_TYPE},usb-conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",usb-conn-port=${USB_PORT}")
     -cpu max
     -smp 7
     -m 4G
     -serial mon:stdio
     -device ramfb
-    -device usb-ehci
+    -device usb-ehci,id=ehci
     -device usb-kbd
     -device usb-mouse
     -drive file=${OUTPUT_DIR}/sep_nvram,if=pflash,format=raw
@@ -337,14 +466,20 @@ QEMU_ARGS+=(
 # Run QEMU
 echo "Starting QEMU with arguments:"
 echo "${BUILD_DIR}/qemu-system-aarch64" "${QEMU_ARGS[@]}"
-"${BUILD_DIR}/qemu-system-aarch64" "${QEMU_ARGS[@]}"
+
+echo -e "\n${YELLOW}Note: For USB passthrough to work, make sure to start the companion VM first with:\n"
+echo -e "# On the companion VM, run:"
+echo -e "qemu-system-x86_64 \\"
+echo -e "  -usb -device usb-ehci,id=ehci \\"
+echo -e "  -device usb-tcp-remote,conn-type=${USB_TYPE},conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",conn-port=${USB_PORT}"),bus=ehci.0\\"${NC}\n"
+
+exec "${BUILD_DIR}/qemu-system-aarch64" "${QEMU_ARGS[@]}"
 EOF
 
     chmod +x "${QEMU_DIR}/run_iphone.sh"
     echo -e "${GREEN}Run script created at ${QEMU_DIR}/run_iphone.sh${NC}"
     echo "Usage:"
-    echo "  ./run_iphone.sh      - Run the emulated iPhone"
-    echo "  ./run_iphone.sh restore - Start in restore mode"
+    echo "  ./run_iphone.sh [restore|run] [usb_type] [usb_addr] [usb_port]      - Run the emulated iPhone"
 }
 
 # Main function
@@ -374,6 +509,9 @@ main() {
     else
         echo -e "${YELLOW}IPSW already downloaded and extracted.${NC}"
     fi
+    
+    # Prepare AP ticket
+    prepare_ap_ticket
     
     # Prepare SEP firmware
     prepare_sep_firmware
