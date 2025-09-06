@@ -5,7 +5,7 @@ set -e
 # This script automates the setup of QEMUAppleSilicon on Linux/macOS
 
 # Configuration
-QEMU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QEMU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 BUILD_DIR="${QEMU_DIR}/build"
 FIRMWARE_DIR="${QEMU_DIR}/firmware"
 OUTPUT_DIR="${QEMU_DIR}/output"
@@ -412,7 +412,6 @@ QEMU_ARGS=(
     -smp 7
     -m 4G
     -serial mon:stdio
-    -device ramfb
     -device usb-ehci,id=ehci
     -device usb-kbd
     -device usb-mouse
@@ -425,7 +424,7 @@ QEMU_ARGS=(
     -drive file=${OUTPUT_DIR}/nvram,if=none,format=raw,id=nvram -device apple-nvram,drive=nvram,bus=nvme-bus.0,nsid=5,nstype=5,id=nvram,logical_block_size=4096,physical_block_size=4096
     -drive file=${OUTPUT_DIR}/effaceable,format=raw,if=none,id=effaceable -device nvme-ns,drive=effaceable,bus=nvme-bus.0,nsid=6,nstype=6,logical_block_size=4096,physical_block_size=4096
     -drive file=${OUTPUT_DIR}/panic_log,format=raw,if=none,id=panic_log -device nvme-ns,drive=panic_log,bus=nvme-bus.0,nsid=7,nstype=8,logical_block_size=4096,physical_block_size=4096
-    -device nvme,serial=nvme-1,id=nvme-bus.0
+    -device nvme,serial=nvme-0,id=nvme-bus.0
 )
 
 # Add display options based on OS
@@ -446,7 +445,8 @@ if [ "$MODE" = "restore" ]; then
         -kernel "${FIRMWARE_DIR}/iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/kernelcache.research.iphone12b"
         -dtb "${FIRMWARE_DIR}/iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/Firmware/all_flash/DeviceTree.n104ap.im4p"
         -initrd "${FIRMWARE_DIR}/iPhone11_8_iPhone12_1_14.0_18A5351d_Restore/038-44135-124.dmg"
-        -append "rd=md0 -v"
+        # -append "rd=md0 -v"
+        -append "-v tlto_us=-1 mtxspin=-1 agm-genuine=1 agm-authentic=1 agm-trusted=1 serial=3 launchd_unsecure_cache=1 wdt=-1 -vm_compressor_wk_sw"
     )
 else
     echo "Starting in normal mode..."
@@ -468,15 +468,16 @@ QEMU_ARGS+=(
 
 # Run QEMU
 echo "Starting QEMU with arguments:"
-echo "${BUILD_DIR}/qemu-system-aarch64" "${QEMU_ARGS[@]}"
+echo "${BUILD_DIR}/qemu-system-aarch64-unsigned" "${QEMU_ARGS[@]}"
 
 echo -e "\n${YELLOW}Note: For USB passthrough to work, make sure to start the companion VM first with:\n"
 echo -e "# On the companion VM, run:"
-echo -e "qemu-system-x86_64 \\"
+echo -e "${BUILD_DIR}/qemu-system-aarch64-unsigned \\"
 echo -e "  -usb -device usb-ehci,id=ehci \\"
-echo -e "  -device usb-tcp-remote,conn-type=${USB_TYPE},conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",conn-port=${USB_PORT}"),bus=ehci.0\\"${NC}\n"
+echo -e "  -device usb-tcp-remote,conn-type=${USB_TYPE},conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",conn-port=${USB_PORT}"),bus=ehci.0"
+echo -e "${NC}\n"
 
-exec "${BUILD_DIR}/qemu-system-aarch64" "${QEMU_ARGS[@]}"
+exec "${BUILD_DIR}/qemu-system-aarch64-unsigned" "${QEMU_ARGS[@]}"
 EOF
 
     chmod +x "${QEMU_DIR}/run_iphone.sh"

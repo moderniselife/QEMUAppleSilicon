@@ -22,3 +22,14 @@ GTAGS
 *.gcov
 .cache/
 .DS_Store
+
+# Virtual Environment
+venv/
+
+# Output and Backup
+output/
+output-bk/
+
+# Firmware
+firmware/
+
