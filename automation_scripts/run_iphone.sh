@@ -29,14 +29,15 @@ fi
 
 # Common QEMU arguments
 QEMU_ARGS=(
-    -M t8030,usb-conn-type=${USB_TYPE},usb-conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",usb-conn-port=${USB_PORT}")
+    # -M t8030,usb-conn-type=${USB_TYPE},usb-conn-addr=${USB_ADDR}$([ "$USB_TYPE" != "unix" ] && echo ",usb-conn-port=${USB_PORT}")
+    -M "t8030,usb-conn-type=ipv4,usb-conn-addr=127.0.0.1,usb-conn-port=8030"
     -cpu max
     -smp 7
     -m 4G
     -serial mon:stdio
     -device usb-ehci,id=ehci
-    -device usb-kbd
-    -device usb-mouse
+    -device usb-kbd,bus=ehci.0
+    -device usb-mouse,bus=ehci.0
     -drive file=${OUTPUT_DIR}/sep_nvram,if=pflash,format=raw
     -drive file=${OUTPUT_DIR}/sep_ssc,if=pflash,format=raw
     -drive file=${OUTPUT_DIR}/root,format=raw,if=none,id=root -device nvme-ns,drive=root,bus=nvme-bus.0,nsid=1,nstype=1,logical_block_size=4096,physical_block_size=4096
